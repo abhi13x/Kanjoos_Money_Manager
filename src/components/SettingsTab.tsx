@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, Card, CardContent, Typography, 
   Grid, TextField, Button, MenuItem, List, 
-  ListItem, ListItemText, IconButton, Divider, Alert 
+  ListItem, ListItemText, IconButton, Divider, Alert, Stack 
 } from '@mui/material';
-import { Plus, Trash2, Globe, Cloud } from 'lucide-react';
+import { Plus, Trash2, Globe, Cloud, Upload, Download, LogOut } from 'lucide-react';
 import { db, type Category } from '@/db/schema';
 import { useSettings } from '@/hooks/useSettings';
 import { GDriveSyncService } from '@/services/gdriveSync';
@@ -15,7 +15,13 @@ interface SettingsTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
   const { defaultCurrency, updateDefaultCurrency } = useSettings();
-  const [profileName, setProfileName] = useState('Abhishek Bhatnagar');
+
+  // Username State: Persistent with local storage, defaults to Abhishek Bhatnagar
+  const USERNAME_STORAGE_KEY = 'kanjoos_username';
+  const [profileName, setProfileName] = useState<string>(() => {
+    return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek Bhatnagar';
+  });
+  const [profileSavedMsg, setProfileSavedMsg] = useState<boolean>(false);
 
   // Category State Values
   const [newCatName, setNewCatName] = useState('');
@@ -23,31 +29,55 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
   const [newParentId, setNewParentId] = useState<string>('');
 
   // Google Drive Sync State
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  const syncService = GDriveSyncService.getInstance();
+  // Initialize Singleton with custom keys and auto-folders
+  const syncService = GDriveSyncService.getInstance({
+    tokenKey: 'kanjoos_gdrive_token',
+    expiryKey: 'kanjoos_gdrive_expiry',
+    defaultFolders: ['Backups', 'Exports']
+  });
 
-  // Handle Actual Google Drive SSO & Sync Flow
-  const handleGoogleSync = async () => {
+  // Check active session & automatically verify GDrive folders on load
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const token = await syncService.getValidToken();
+        if (token) {
+          setIsConnected(true);
+          await syncService.ensureAppFolders(token);
+        } else {
+          setIsConnected(false);
+        }
+      } catch (err) {
+        setIsConnected(false);
+      }
+    };
+    checkSession();
+  }, []);
+
+  // Update Profile Name Handler
+  const handleProfileNameChange = (newName: string) => {
+    setProfileName(newName);
+    localStorage.setItem(USERNAME_STORAGE_KEY, newName);
+    setProfileSavedMsg(true);
+    setTimeout(() => setProfileSavedMsg(false), 2000);
+  };
+
+  // Google Sync & Export with dynamic timestamp filename
+  const handleGoogleExport = async () => {
     setIsSyncing(true);
     setSyncError(null);
     setSyncStatus(null);
 
     try {
-      let token = accessToken;
-      if (!token) {
-        token = await syncService.requestAuth();
-        if (token) setAccessToken(token);
-      }
-
-      if (token) {
-        setSyncStatus('Syncing database with Google Drive...');
-        await syncService.exportBackupToDrive(token);
-        setSyncStatus('✓ Synced with Google Drive successfully!');
-      }
+      setSyncStatus('Creating backup snapshot...');
+      const backupFileName = await syncService.exportBackupToDrive();
+      setIsConnected(true);
+      setSyncStatus(`✓ Backup saved to Google Drive ("Backups/${backupFileName}")!`);
     } catch (err: any) {
       setSyncError(
         err?.message || 'Failed to sync with Google Drive. Ensure VITE_GOOGLE_CLIENT_ID is set in .env'
@@ -55,6 +85,36 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Google Import / Restore (Pulls the latest timestamped backup)
+  const handleGoogleImport = async () => {
+    if (!confirm('Restoring from Google Drive will overwrite local database with the latest backup. Continue?')) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncError(null);
+    setSyncStatus(null);
+
+    try {
+      setSyncStatus('Fetching latest backup from Google Drive...');
+      await syncService.importBackupFromDrive();
+      setIsConnected(true);
+      setSyncStatus('✓ Local database restored successfully from latest backup!');
+      window.location.reload();
+    } catch (err: any) {
+      setSyncError(err?.message || 'Failed to restore backup from Google Drive.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Logout / Disconnect
+  const handleDisconnect = () => {
+    syncService.clearSession();
+    setIsConnected(false);
+    setSyncStatus('Disconnected Google account.');
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -75,7 +135,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
   const handleDeleteCategory = async (id: string) => {
     if (confirm("Delete this category? Sub-categories will be unlinked.")) {
       await db.categories.delete(id);
-      // Unlink sub-categories
       const children = categories.filter(c => c.parentId === id);
       for (let child of children) {
         await db.categories.update(child.id, { parentId: undefined });
@@ -111,7 +170,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
               <TextField 
                 label="Username" 
                 value={profileName} 
-                onChange={(e) => setProfileName(e.target.value)} 
+                onChange={(e) => handleProfileNameChange(e.target.value)} 
+                helperText={profileSavedMsg ? "✓ Username updated" : "Editable - updates saved automatically"}
+                slotProps={{
+                  formHelperText: { sx: { color: profileSavedMsg ? 'success.main' : 'text.secondary' } }
+                }}
                 fullWidth 
               />
 
@@ -131,21 +194,49 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
               {/* Federated Login Modules */}
               <Box sx={{ mt: 1 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>Account Sync Profiles</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                
+                <Stack spacing={1.5}>
                   <Button 
-                    variant="outlined" 
-                    color="inherit"
+                    variant={isConnected ? "contained" : "outlined"}
+                    color={isConnected ? "primary" : "inherit"}
                     disabled={isSyncing}
-                    startIcon={<Globe size={18} />} 
-                    onClick={handleGoogleSync}
+                    startIcon={isSyncing ? <Globe size={18} /> : <Upload size={18} />} 
+                    onClick={handleGoogleExport}
                     sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '12px', justifyContent: 'flex-start', py: 1 }}
                   >
                     {isSyncing 
-                      ? 'Connecting & Syncing...' 
-                      : accessToken 
-                      ? '✓ Synced with Google Account' 
-                      : 'Sync with Google Account'}
+                      ? 'Creating backup snapshot...' 
+                      : isConnected 
+                      ? 'Export Backup Snapshot to Drive' 
+                      : 'Sync & Backup to Google Drive'}
                   </Button>
+
+                  {isConnected && (
+                    <>
+                      <Button 
+                        variant="outlined" 
+                        color="info"
+                        disabled={isSyncing}
+                        startIcon={<Download size={18} />} 
+                        onClick={handleGoogleImport}
+                        sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '12px', justifyContent: 'flex-start', py: 1 }}
+                      >
+                        Restore Latest Backup from Drive
+                      </Button>
+
+                      <Button 
+                        variant="text" 
+                        color="error"
+                        disabled={isSyncing}
+                        startIcon={<LogOut size={18} />} 
+                        onClick={handleDisconnect}
+                        sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '12px', justifyContent: 'flex-start', py: 0.5 }}
+                      >
+                        Disconnect Google Account
+                      </Button>
+                    </>
+                  )}
+
                   <Button 
                     variant="outlined" 
                     color="inherit"
@@ -155,7 +246,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ categories }) => {
                   >
                     Sync with iCloud Keychain
                   </Button>
-                </Box>
+                </Stack>
               </Box>
             </CardContent>
           </Card>
