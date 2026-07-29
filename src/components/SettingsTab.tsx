@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Typography,
   Grid, TextField, Button, MenuItem, Alert, Stack,
@@ -20,7 +20,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
   // Extract from hook with fallback to direct service calls
   const { isConnected, disconnect, exportBackup, importBackup } = gDriveSession;
   const connect = (gDriveSession as any).connect;
-  const lastSyncTime = (gDriveSession as any).lastSyncTime;
+  
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    const syncService = GDriveSyncService.getInstance();
+    const unsubscribe = syncService.subscribe((status) => {
+      setLastSyncTime(status.lastSyncTime);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const USERNAME_STORAGE_KEY = 'kanjoos_username';
   const [profileName, setProfileName] = useState<string>(() => {
@@ -52,7 +61,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
       }
       setSyncStatus('✓ Successfully signed in to Google Drive!');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to sign in with Google.';
+      let message = 'Failed to sign in with Google.';
+      if (err instanceof Error) {
+        message = err.message;
+        if (message.includes('Forbidden') || message.includes('403')) {
+          message = 'Google Drive API is not enabled. Please check your project settings.';
+        } else if (message.includes('Unauthorized') || message.includes('401')) {
+          message = 'Session expired. Please try signing in again.';
+        }
+      }
       setSyncError(message);
     } finally {
       setIsSyncing(false);
@@ -69,7 +86,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
       const backupFileName = await exportBackup();
       setSyncStatus(`✓ Backup saved to Google Drive ("Backups/${backupFileName}")!`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to sync with Google Drive.';
+      let message = 'Failed to sync with Google Drive.';
+      if (err instanceof Error) {
+        message = err.message;
+        if (message.includes('Forbidden') || message.includes('403')) {
+          message = 'Google Drive API is not enabled. Please check your project settings.';
+        } else if (message.includes('Unauthorized') || message.includes('401')) {
+          message = 'Session expired. Please try signing in again.';
+        }
+      }
       setSyncError(message);
     } finally {
       setIsSyncing(false);
@@ -89,9 +114,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
       setSyncStatus('Fetching latest backup from Google Drive...');
       await importBackup();
       setSyncStatus('✓ Local database restored successfully!');
-      window.location.reload();
+      // Removed window.location.reload() as useLiveQuery in Dashboard will automatically update the UI
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to restore backup from Google Drive.';
+      let message = 'Failed to restore backup from Google Drive.';
+      if (err instanceof Error) {
+        message = err.message;
+        if (message.includes('Forbidden') || message.includes('403')) {
+          message = 'Google Drive API is not enabled. Please check your project settings.';
+        } else if (message.includes('Unauthorized') || message.includes('401')) {
+          message = 'Session expired. Please try signing in again.';
+        }
+      }
       setSyncError(message);
     } finally {
       setIsSyncing(false);
