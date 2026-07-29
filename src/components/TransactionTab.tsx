@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
-import { Box, Button, ButtonGroup, TextField, Typography, 
-  Card, IconButton, Dialog, DialogTitle, 
-  DialogContent, DialogActions, Chip } 
-  from '@mui/material';
-import { Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { 
+  Box, Button, ToggleButtonGroup, ToggleButton, TextField, Typography, 
+  Card, IconButton, Dialog, DialogTitle, DialogContent, 
+  DialogActions, Chip, Avatar, Tooltip, InputAdornment 
+} from '@mui/material';
+import { 
+  Trash2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, 
+  Repeat, FilterX, Calendar, ReceiptText 
+} from 'lucide-react';
 import type { Transaction, Account, Category } from '@/db/schema';
 import { db } from '@/db/schema';
 
@@ -25,13 +29,49 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   const [endDate, setEndDate] = useState<string>('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // Filter transactions by selected date range
-  const filteredTx = transactions.filter((tx) => {
-    if (startDate && tx.date < new Date(startDate).getTime()) return false;
-    // Include the entire end day
-    if (endDate && tx.date > new Date(endDate).getTime() + 86400000) return false;
-    return true;
-  });
+  // 1. Filtered Transactions
+  const filteredTx = useMemo(() => {
+    return transactions.filter((tx) => {
+      if (startDate && tx.date < new Date(startDate).getTime()) return false;
+      if (endDate && tx.date > new Date(endDate).getTime() + 86400000) return false;
+      return true;
+    });
+  }, [transactions, startDate, endDate]);
+
+  // 2. Grouped Engine with Group Totals
+  const groupedData = useMemo(() => {
+    const groups: Record<string, { items: Transaction[]; netCents: number }> = {};
+
+    filteredTx.forEach((tx) => {
+      const dateObj = new Date(tx.date);
+      let key = '';
+
+      if (viewMode === 'daily') {
+        key = dateObj.toLocaleDateString(undefined, {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+      } else if (viewMode === 'monthly') {
+        key = dateObj.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      } else {
+        key = dateObj.getFullYear().toString();
+      }
+
+      if (!groups[key]) {
+        groups[key] = { items: [], netCents: 0 };
+      }
+
+      groups[key].items.push(tx);
+
+      // Compute group net impact
+      const multiplier = tx.type === 'income' ? 1 : tx.type === 'expense' ? -1 : 0;
+      groups[key].netCents += tx.amount * multiplier;
+    });
+
+    return groups;
+  }, [filteredTx, viewMode]);
 
   const handleDelete = async () => {
     if (deleteId) {
@@ -40,72 +80,83 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
     }
   };
 
-  // Rendering Helper: Get category display name
   const getCategoryName = (tx: Transaction) => {
     if (tx.type === 'transfer') return 'Transfer';
     const cat = categories.find((c) => c.id === tx.categoryId);
     return cat ? cat.name : 'Uncategorized';
   };
 
-  // Daily Grouping Engine
-  const groupDaily = () => {
-    const groups: { [key: string]: Transaction[] } = {};
-    filteredTx.forEach((tx) => {
-      const dateKey = new Date(tx.date).toLocaleDateString(undefined, {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-      if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push(tx);
-    });
-    return groups;
+  // Shared sx style to fix native date-picker visibility in light/dark modes
+  const dateInputSx = {
+    borderRadius: '12px',
+    fontSize: '0.875rem',
+    colorScheme: (theme: any) => theme.palette.mode,
+    '& ::-webkit-calendar-picker-indicator': {
+      cursor: 'pointer',
+      filter: (theme: any) => (theme.palette.mode === 'dark' ? 'invert(1)' : 'none'),
+      opacity: 0.7,
+      '&:hover': { opacity: 1 },
+    },
   };
-
-  // Period (Monthly / Yearly) Grouping Engine
-  const groupPeriod = (mode: 'monthly' | 'yearly') => {
-    const groups: { [key: string]: Transaction[] } = {};
-    filteredTx.forEach((tx) => {
-      const dateObj = new Date(tx.date);
-      const key = mode === 'monthly' 
-        ? dateObj.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-        : dateObj.getFullYear().toString();
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(tx);
-    });
-    return groups;
-  };
-
-  const dailyGroups = groupDaily();
-  const periodGroups = groupPeriod(viewMode === 'monthly' ? 'monthly' : 'yearly');
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      
       {/* Date Range Picker & View Toggles */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-        <ButtonGroup variant="outlined" size="small" sx={{ borderRadius: '12px' }}>
-          {(['daily', 'monthly', 'yearly'] as const).map((mode) => (
-            <Button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              variant={viewMode === mode ? 'contained' : 'outlined'}
-              sx={{ textTransform: 'capitalize', fontWeight: 700 }}
-            >
-              {mode}
-            </Button>
-          ))}
-        </ButtonGroup>
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          flexWrap: 'wrap', 
+          gap: 2, 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          bgcolor: 'background.paper',
+          p: 2,
+          borderRadius: '20px',
+          border: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_e, newMode) => newMode && setViewMode(newMode)}
+          size="small"
+          sx={{
+            bgcolor: 'action.hover',
+            p: 0.5,
+            borderRadius: '12px',
+            border: 'none',
+            '& .MuiToggleButtonGroup-grouped': {
+              border: 0,
+              borderRadius: '8px !important',
+              textTransform: 'capitalize',
+              fontWeight: 700,
+              px: 2,
+              '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: 1, color: 'primary.main' }
+            }
+          }}
+        >
+          <ToggleButton value="daily">Daily</ToggleButton>
+          <ToggleButton value="monthly">Monthly</ToggleButton>
+          <ToggleButton value="yearly">Yearly</ToggleButton>
+        </ToggleButtonGroup>
 
-        {/* Date Filters */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {/* Filter Controls */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
           <TextField
             type="date"
             label="From"
             size="small"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              input: {
+                startAdornment: (<InputAdornment position="start"><Calendar size={16} /></InputAdornment>),
+                sx: dateInputSx
+              }
+            }}
           />
           <TextField
             type="date"
@@ -113,54 +164,92 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             size="small"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              input: {
+                startAdornment: (<InputAdornment position="start"><Calendar size={16} /></InputAdornment>),
+                sx: dateInputSx
+              }
+            }}
           />
           {(startDate || endDate) && (
-            <Button 
-              color="error" 
-              onClick={() => { setStartDate(''); setEndDate(''); }}
-              sx={{ fontWeight: 700 }}
-            >
-              Clear
-            </Button>
+            <Tooltip title="Reset date filters">
+              <Button 
+                color="error" 
+                size="small"
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                startIcon={<FilterX size={16} />}
+                sx={{ fontWeight: 700, borderRadius: '10px' }}
+              >
+                Clear
+              </Button>
+            </Tooltip>
           )}
         </Box>
       </Box>
 
       {/* Ledger Output */}
-      {filteredTx.length === 0 ? (
-        <Card sx={{ p: 8, textAlign: 'center', border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '16px' }}>
-          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-            No transactions found for the selected period.
+      {Object.keys(groupedData).length === 0 ? (
+        <Card 
+          sx={{ 
+            p: 8, 
+            textAlign: 'center', 
+            border: '1px solid', 
+            borderColor: 'divider', 
+            boxShadow: 'none', 
+            borderRadius: '24px',
+            bgcolor: 'background.paper'
+          }}
+        >
+          <ReceiptText size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+            No Transactions Found
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Try adjusting your date filters or add a new transaction entry.
           </Typography>
         </Card>
-      ) : viewMode === 'daily' ? (
-        // Render Daily View grouped under headers
-        Object.keys(dailyGroups).map((date) => (
-          <Box key={date}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.secondary', mb: 1, mt: 2, px: 1 }}>
-              {date}
-            </Typography>
-            <Card sx={{ border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '16px', overflow: 'hidden' }}>
-              {dailyGroups[date].map((tx, idx) => (
-                <Box key={tx.id} sx={{ borderBottom: idx !== dailyGroups[date].length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-                  <TransactionRow tx={tx} accounts={accounts} getCategoryName={getCategoryName} format={format} onDelete={() => setDeleteId(tx.id)} />
-                </Box>
-              ))}
-            </Card>
-          </Box>
-        ))
       ) : (
-        // Render Monthly / Yearly View
-        Object.keys(periodGroups).map((period) => (
-          <Box key={period}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.secondary', mb: 1, mt: 2, px: 1 }}>
-              {period}
-            </Typography>
-            <Card sx={{ border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '16px', overflow: 'hidden' }}>
-              {periodGroups[period].map((tx, idx) => (
-                <Box key={tx.id} sx={{ borderBottom: idx !== periodGroups[period].length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-                  <TransactionRow tx={tx} accounts={accounts} getCategoryName={getCategoryName} format={format} onDelete={() => setDeleteId(tx.id)} />
+        Object.entries(groupedData).map(([groupTitle, { items, netCents }]) => (
+          <Box key={groupTitle}>
+            {/* Group Title Header + Net Pill */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, px: 1, mt: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary', letterSpacing: '0.2px' }}>
+                {groupTitle}
+              </Typography>
+              {netCents !== 0 && (
+                <Chip 
+                  label={`Net: ${netCents > 0 ? '+' : ''}${format(netCents)}`}
+                  size="small"
+                  sx={{ 
+                    fontWeight: 800, 
+                    fontSize: '0.72rem',
+                    bgcolor: netCents > 0 ? 'success.50' : 'error.50',
+                    color: netCents > 0 ? 'success.main' : 'error.main',
+                    border: '1px solid',
+                    borderColor: netCents > 0 ? 'success.200' : 'error.200'
+                  }}
+                />
+              )}
+            </Box>
+
+            {/* Transactions Card Group */}
+            <Card sx={{ border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '20px', overflow: 'hidden' }}>
+              {items.map((tx, idx) => (
+                <Box 
+                  key={tx.id} 
+                  sx={{ 
+                    borderBottom: idx !== items.length - 1 ? '1px solid' : 'none', 
+                    borderColor: 'divider' 
+                  }}
+                >
+                  <TransactionRow 
+                    tx={tx} 
+                    accounts={accounts} 
+                    getCategoryName={getCategoryName} 
+                    format={format} 
+                    onDelete={() => setDeleteId(tx.id)} 
+                  />
                 </Box>
               ))}
             </Card>
@@ -168,22 +257,36 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         ))
       )}
 
-      {/* Confirmation Dialog */}
-      <Dialog open={!!deleteId} onClose={() => setDeleteId(null)}>
-        <DialogTitle sx={{ fontWeight: 800 }}>Confirm Deletion</DialogTitle>
+      {/* Delete Confirmation Dialog */}
+      <Dialog 
+        open={!!deleteId} 
+        onClose={() => setDeleteId(null)}
+        slotProps={{
+          paper: { sx: { borderRadius: '24px', p: 1 } }
+        }}
+      >
+        <DialogTitle component="span" sx={{ fontWeight: 800, pt: 2, pb: 1, display: 'block' }}>
+          Confirm Deletion
+        </DialogTitle>
         <DialogContent>
-          <Typography variant="body2">Are you sure you want to delete this transaction? This action cannot be undone.</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to delete this transaction? This action will permanently remove it from Dexie storage.
+          </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteId(null)} color="inherit">Cancel</Button>
-          <Button onClick={handleDelete} variant="contained" color="error">Delete</Button>
+          <Button onClick={() => setDeleteId(null)} color="inherit" sx={{ borderRadius: '10px', fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button onClick={handleDelete} variant="contained" color="error" sx={{ borderRadius: '10px', fontWeight: 700 }}>
+            Delete Entry
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 };
 
-// Internal reusable Row component to display fields correctly
+// Reusable Stylish Row Component
 const TransactionRow: React.FC<{
   tx: Transaction;
   accounts: Account[];
@@ -194,39 +297,112 @@ const TransactionRow: React.FC<{
   const account = accounts.find((a) => a.id === tx.accountId);
   const toAccount = tx.toAccountId ? accounts.find((a) => a.id === tx.toAccountId) : null;
 
+  // Visual type styling configurations
+  const typeConfig = {
+    income: {
+      color: 'success.main',
+      bg: 'success.50',
+      icon: <ArrowDownLeft size={20} className="text-emerald-600" />,
+      sign: '+'
+    },
+    expense: {
+      color: 'text.primary',
+      bg: 'action.hover',
+      icon: <ArrowUpRight size={20} className="text-rose-500" />,
+      sign: '-'
+    },
+    transfer: {
+      color: 'info.main',
+      bg: 'info.50',
+      icon: <ArrowRightLeft size={18} className="text-blue-500" />,
+      sign: ''
+    }
+  }[tx.type];
+
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, hover: { bgcolor: 'action.hover' } }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <Typography variant="body1" sx={{ fontWeight: 700 }}>
-          {getCategoryName(tx)}
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-            {tx.type === 'transfer' && account && toAccount 
-              ? `${account.name} ➔ ${toAccount.name}` 
-              : account?.name}
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        p: 2, 
+        transition: 'background-color 0.2s',
+        '&:hover': { bgcolor: 'action.hover' } 
+      }}
+    >
+      {/* Left: Avatar + Details */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Avatar 
+          sx={{ 
+            bgcolor: typeConfig.bg, 
+            width: 44, 
+            height: 44, 
+            borderRadius: '14px',
+            border: '1px solid',
+            borderColor: 'divider'
+          }}
+        >
+          {typeConfig.icon}
+        </Avatar>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+          <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            {getCategoryName(tx)}
           </Typography>
-          {tx.isRecurring && (
-            <Chip label={`Repeats: ${tx.repeatInterval}`} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 800 }} />
-          )}
-          {tx.note && (
-            <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-              — {tx.note}
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              {tx.type === 'transfer' && account && toAccount 
+                ? `${account.name} ➔ ${toAccount.name}` 
+                : account?.name || 'Unknown Account'}
             </Typography>
-          )}
+
+            {tx.isRecurring && (
+              <Chip 
+                icon={<Repeat size={10} />}
+                label={tx.repeatInterval} 
+                size="small" 
+                variant="outlined" 
+                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800, textTransform: 'capitalize' }} 
+              />
+            )}
+
+            {tx.note && (
+              <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                • {tx.note}
+              </Typography>
+            )}
+          </Box>
+
           {tx.description && (
-            <Typography variant="caption" sx={{ color: 'text.disabled', width: '100%' }}>
-              Desc: {tx.description}
+            <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.72rem' }}>
+              {tx.description}
             </Typography>
           )}
         </Box>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="body1" sx={{ fontWeight: 800, color: tx.type === 'income' ? 'success.main' : tx.type === 'expense' ? 'error.main' : 'text.primary' }}>
-          {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''} {format(tx.amount)}
+      {/* Right: Amount + Actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Typography 
+          variant="body1" 
+          sx={{ 
+            fontWeight: 800, 
+            color: typeConfig.color,
+            fontSize: '1rem'
+          }}
+        >
+          {typeConfig.sign} {format(tx.amount)}
         </Typography>
-        <IconButton size="small" color="error" onClick={onDelete}>
+
+        <IconButton 
+          size="small" 
+          onClick={onDelete}
+          sx={{ 
+            color: 'text.disabled',
+            '&:hover': { color: 'error.main', bgcolor: 'error.50' }
+          }}
+        >
           <Trash2 size={16} />
         </IconButton>
       </Box>

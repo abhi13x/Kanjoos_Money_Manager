@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { useSettings } from '@/hooks/useSettings';
@@ -10,6 +10,7 @@ import { TransactionsTab } from './TransactionTab';
 import { StatsTab } from './StatsTab';
 import { AccountsTab } from './AccountsTab';
 import { SettingsTab } from './SettingsTab';
+import { CategoriesTab } from './CategoriesTab';
 import TransactionModal from './TransactionModal';
 
 import { 
@@ -23,6 +24,8 @@ import {
 
 export const Dashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<number>(0);
+  const [settingsView, setSettingsView] = useState<'main' | 'categories'>('main');
+  const [settingsMounted, setSettingsMounted] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -34,6 +37,10 @@ export const Dashboard: React.FC = () => {
 
   const formatAmount = (cents: number) => formatCurrency(cents, defaultCurrency);
   const isLoading = !accounts || !categories || !transactions;
+
+  useEffect(() => {
+    if (currentTab === 4) setSettingsMounted(true);
+  }, [currentTab]);
 
   if (isLoading) {
     return (
@@ -92,7 +99,20 @@ export const Dashboard: React.FC = () => {
         {currentTab === 1 && <TransactionsTab transactions={transactions} accounts={accounts} categories={categories} format={formatAmount} />}
         {currentTab === 2 && <StatsTab transactions={transactions} categories={categories} format={formatAmount} />}
         {currentTab === 3 && <AccountsTab accounts={accounts} format={formatAmount} />}
-        {currentTab === 4 && <SettingsTab categories={categories} />}
+
+        {settingsMounted && (
+          <>
+            <Box sx={{ display: currentTab === 4 && settingsView === 'categories' ? 'block' : 'none' }}>
+              <CategoriesTab
+                categories={categories}
+                onBack={() => setSettingsView('main')}
+              />
+            </Box>
+            <Box sx={{ display: currentTab === 4 && settingsView === 'main' ? 'block' : 'none' }}>
+              <SettingsTab onNavigateToCategories={() => setSettingsView('categories')} />
+            </Box>
+          </>
+        )}
       </Container>
 
       {/* FAB - Floating action button on Left Bottom Side */}
@@ -104,7 +124,7 @@ export const Dashboard: React.FC = () => {
           onClick={() => setIsModalOpen(true)}
           sx={{
             position: 'fixed',
-            left: 24,
+            right: 24,
             bottom: { xs: 88, md: 24 }, // Responsive adjustments to clear bottom nav
             boxShadow: 4,
           }}
@@ -127,7 +147,10 @@ export const Dashboard: React.FC = () => {
         <BottomNavigation
           showLabels
           value={currentTab}
-          onChange={(_e, val) => setCurrentTab(val)}
+          onChange={(_e, val) => {
+            setCurrentTab(val);
+            if (val !== 4) setSettingsView('main');
+          }}
           sx={{ height: '64px', bgcolor: 'background.paper' }}
         >
           <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} />} />

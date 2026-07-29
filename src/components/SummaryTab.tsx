@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Grid, Card, CardContent, Typography, List, ListItem, ListItemText, Chip, Divider } from '@mui/material';
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Calendar, CreditCard as CardIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Calendar, CreditCard as CardIcon, LineChart } from 'lucide-react';
 import type { Account, Transaction } from '@/db/schema';
+import { getInvestmentSummaries, getTotalProjectedInterest, getTotalProjectedMaturity } from '@/services/investmentService';
 
 interface SummaryTabProps {
   accounts: Account[];
@@ -45,10 +46,16 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
         type: acc.type,
         dueDay,
         status,
-        amount: acc.type === 'credit_card' ? acc.currentBalance : 0,
+        amount: acc.type === 'credit_card'
+          ? acc.currentBalance
+          : (acc.monthlyInvestment ?? 0),
       };
     })
     .sort((a, b) => a.dueDay - b.dueDay);
+
+  const investmentSummaries = getInvestmentSummaries(accounts);
+  const totalProjectedMaturity = getTotalProjectedMaturity(accounts);
+  const totalProjectedInterest = getTotalProjectedInterest(accounts);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -79,6 +86,60 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
           </Grid>
         ))}
       </Grid>
+
+      {/* Investment Projections */}
+      {investmentSummaries.length > 0 && (
+        <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LineChart size={20} /> Investment Projections
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
+                  Total Maturity Value
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900, color: 'success.main' }}>
+                  {format(totalProjectedMaturity)}
+                </Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}>
+                  Total Interest / Gains
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900, color: 'info.main' }}>
+                  {format(totalProjectedInterest)}
+                </Typography>
+              </Grid>
+            </Grid>
+            <List disablePadding>
+              {investmentSummaries.map(({ account, subType, projection }) => (
+                <Box key={account.id}>
+                  <ListItem sx={{ px: 0, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <ListItemText
+                      primary={account.name}
+                      secondary={`${subType.toUpperCase()} · ${account.tenureMonths} mo @ ${account.interestRate ?? account.expectedReturnRate}%`}
+                      slotProps={{
+                        primary: { sx: { fontWeight: 700, fontSize: '0.9rem' } },
+                        secondary: { sx: { fontSize: '0.75rem' } },
+                      }}
+                    />
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                        {format(projection.maturityValueCents)}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
+                        +{format(projection.interestEarnedCents)}
+                      </Typography>
+                    </Box>
+                  </ListItem>
+                  <Divider />
+                </Box>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
 
       <Grid container spacing={3}>
         {/* Credit Card Utilization Card */}

@@ -13,6 +13,9 @@ export type AccountType =
   | 'fd_rd' 
   | 'scheme'; // NPS, EPFO, PPF
 
+export type InvestmentSubType = 'fd' | 'rd' | 'sip' | 'lumpsum' | 'ppf' | 'nps' | 'epfo';
+export type CompoundingFrequency = 'monthly' | 'quarterly' | 'annually';
+
 export interface Account {
   id: string;
   name: string;
@@ -21,9 +24,20 @@ export interface Account {
   currentBalance: number; // stored in cents
   currency: string;
   repeatInvestmentDate?: number; // Day of the month (1-31)
-  interestRate?: number; // e.g. 7.1 for PPF
+  interestRate?: number; // e.g. 7.1 for PPF, FD, RD
+  expectedReturnRate?: number; // e.g. 12 for MF/stock CAGR
   statementDate?: number; // Day of the month (1-31)
   dueDate?: number; // Day of the month (1-31)
+  /** Monthly SIP/RD/PPF/EPFO contribution in cents */
+  monthlyInvestment?: number;
+  /** Investment start date (timestamp) for elapsed projections */
+  startDate?: number;
+  /** Total investment horizon in months */
+  tenureMonths?: number;
+  /** Override auto-detected formula type */
+  investmentSubType?: InvestmentSubType;
+  /** Compounding frequency for FD (default: quarterly) */
+  compoundingFrequency?: CompoundingFrequency;
 }
 
 export interface Category {

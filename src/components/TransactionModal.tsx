@@ -108,7 +108,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
       }}
     >
       <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6" sx={{ fontWeight: 800 }}>Add Entry</Typography>
+        <Typography component="span" variant="h6" sx={{ fontWeight: 800 }}>
+          Add Entry
+        </Typography>
         <IconButton onClick={onClose} size="small" sx={{ color: 'text.secondary' }}>
           <X size={20} />
         </IconButton>
