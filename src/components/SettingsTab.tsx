@@ -33,7 +33,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
 
   const USERNAME_STORAGE_KEY = 'kanjoos_username';
   const [profileName, setProfileName] = useState<string>(() => {
-    return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek Bhatnagar';
+    return localStorage.getItem(USERNAME_STORAGE_KEY) || 'User';
   });
   const [profileSavedMsg, setProfileSavedMsg] = useState<boolean>(false);
 
@@ -237,7 +237,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
 
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {isConnected
-                  ? `Your Google account is active. Session persists across app restarts.${
+                  ? `Your Google account is active. Automatic sync is enabled. Session persists across app restarts.${
                       formattedLastSync ? ` Last backup: ${formattedLastSync}` : ''
                     }`
                   : 'Sign in with your Google Account to enable automatic cloud backups and restore data across devices.'}

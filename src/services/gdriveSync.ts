@@ -282,6 +282,9 @@ export class GDriveSyncService {
               this.ensureAppFolders(response.access_token).catch((err) =>
                 console.warn('Background folder creation failed:', err)
               );
+
+              // Start auto-sync immediately after successful authentication
+              this.startAutoSync();
             }
           },
         });
