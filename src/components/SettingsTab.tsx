@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Card, CardContent, Typography,
   Grid, TextField, Button, MenuItem, Alert, Stack,
   List, ListItemButton, ListItemIcon, ListItemText, Divider, Chip,
 } from '@mui/material';
-import { Globe, Cloud, Upload, Download, LogOut, LogIn, Tag, ChevronRight, CheckCircle2 } from 'lucide-react';
+import {
+  Globe, Cloud, Upload, Download, LogOut,
+  LogIn, Tag, ChevronRight, CheckCircle2
+} from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useGDriveSession } from '@/hooks/useGDriveSession';
 import { GDriveSyncService } from '@/services/gdriveSync';
@@ -13,14 +16,16 @@ interface SettingsTabProps {
   onNavigateToCategories: () => void;
 }
 
+const USERNAME_STORAGE_KEY = 'kanjoos_username';
+
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories }) => {
-  const { defaultCurrency, updateDefaultCurrency } = useSettings();
+  const { defaultCurrency, updateDefaultCurrency, themeMode, updateThemeMode } = useSettings();
   const gDriveSession = useGDriveSession();
 
   // Extract from hook with fallback to direct service calls
   const { isConnected, disconnect, exportBackup, importBackup } = gDriveSession;
   const connect = (gDriveSession as any).connect;
-  
+
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
 
   useEffect(() => {
@@ -31,22 +36,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     return () => unsubscribe();
   }, []);
 
-  const USERNAME_STORAGE_KEY = 'kanjoos_username';
+  // Username State with Timer Ref and Event Dispatch
   const [profileName, setProfileName] = useState<string>(() => {
-    return localStorage.getItem(USERNAME_STORAGE_KEY) || 'User';
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek';
+    }
+    return 'Abhishek';
   });
   const [profileSavedMsg, setProfileSavedMsg] = useState<boolean>(false);
-
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleProfileNameChange = (newName: string) => {
     setProfileName(newName);
     localStorage.setItem(USERNAME_STORAGE_KEY, newName);
+    
+    // Dispatch event to inform Dashboard instantly
+    window.dispatchEvent(new Event('kanjoos_username_updated'));
+
     setProfileSavedMsg(true);
-    setTimeout(() => setProfileSavedMsg(false), 2000);
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      setProfileSavedMsg(false);
+    }, 2000);
   };
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     setIsSyncing(true);
@@ -114,7 +138,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
       setSyncStatus('Fetching latest backup from Google Drive...');
       await importBackup();
       setSyncStatus('✓ Local database restored successfully!');
-      // Removed window.location.reload() as useLiveQuery in Dashboard will automatically update the UI
     } catch (err: unknown) {
       let message = 'Failed to restore backup from Google Drive.';
       if (err instanceof Error) {
@@ -190,6 +213,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                 <MenuItem value="EUR">EUR (€)</MenuItem>
                 <MenuItem value="GBP">GBP (£)</MenuItem>
               </TextField>
+
+              <TextField
+                select
+                label="Theme Mode"
+                value={themeMode}
+                onChange={(e) => updateThemeMode(e.target.value as any)}
+                fullWidth
+              >
+                <MenuItem value="light">Light</MenuItem>
+                <MenuItem value="dark">Dark</MenuItem>
+                <MenuItem value="system">System</MenuItem>
+              </TextField>
             </CardContent>
           </Card>
         </Grid>
@@ -256,7 +291,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                       textTransform: 'none',
                       fontWeight: 700,
                       borderRadius: '12px',
-                      justify: 'flex-start',
+                      justifyContent: 'flex-start',
                       py: 1.2,
                     }}
                   >
@@ -275,7 +310,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                     textTransform: 'none',
                     fontWeight: 700,
                     borderRadius: '12px',
-                    justify: 'flex-start',
+                    justifyContent: 'flex-start',
                     py: 1.2,
                   }}
                 >
@@ -293,7 +328,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                     textTransform: 'none',
                     fontWeight: 700,
                     borderRadius: '12px',
-                    justify: 'flex-start',
+                    justifyContent: 'flex-start',
                     py: 1.2,
                   }}
                 >
@@ -312,7 +347,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                       textTransform: 'none',
                       fontWeight: 700,
                       borderRadius: '12px',
-                      justify: 'flex-start',
+                      justifyContent: 'flex-start',
                       py: 0.5,
                       mt: 1,
                     }}
@@ -333,7 +368,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                     textTransform: 'none',
                     fontWeight: 700,
                     borderRadius: '12px',
-                    justify: 'flex-start',
+                    justifyContent: 'flex-start',
                     py: 1.2,
                   }}
                 >
