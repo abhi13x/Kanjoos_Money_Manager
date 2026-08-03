@@ -9,7 +9,6 @@ import {
   Repeat, FilterX, Calendar, ReceiptText 
 } from 'lucide-react';
 import type { Transaction, Account, Category } from '@/db/schema';
-import { db } from '@/db/schema';
 import { deleteTransaction } from '@/services/financeService';
 
 interface TransactionsTabProps {
