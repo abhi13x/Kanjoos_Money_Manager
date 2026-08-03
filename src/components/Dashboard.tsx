@@ -14,33 +14,52 @@ import { CategoriesTab } from './CategoriesTab';
 import TransactionModal from './TransactionModal';
 
 import { 
-  Box, Typography, Button, Menu, MenuItem, 
+  Box, Typography, 
   CircularProgress, Container, Paper, 
   BottomNavigation, BottomNavigationAction, Fab 
 } from '@mui/material';
 import { 
-  Plus, Settings, LayoutDashboard, ArrowRightLeft, BarChart3, Wallet 
+  Plus, LayoutDashboard, ArrowRightLeft, BarChart3, Wallet, Settings
 } from 'lucide-react';
+
+const USERNAME_STORAGE_KEY = 'kanjoos_username';
 
 export const Dashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<number>(0);
   const [settingsView, setSettingsView] = useState<'main' | 'categories'>('main');
-  const [settingsMounted, setSettingsMounted] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  // Dynamic state listener for reactive username updating
+  const [username, setUsername] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek';
+    }
+    return 'Abhishek';
+  });
+
+  useEffect(() => {
+    const handleUsernameSync = () => {
+      const stored = localStorage.getItem(USERNAME_STORAGE_KEY);
+      if (stored) setUsername(stored);
+    };
+
+    window.addEventListener('kanjoos_username_updated', handleUsernameSync);
+    window.addEventListener('storage', handleUsernameSync);
+
+    return () => {
+      window.removeEventListener('kanjoos_username_updated', handleUsernameSync);
+      window.removeEventListener('storage', handleUsernameSync);
+    };
+  }, []);
 
   // Data queries
-  const { defaultCurrency, updateDefaultCurrency } = useSettings();
+  const { defaultCurrency } = useSettings();
   const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
   const transactions = useLiveQuery(() => db.transactions.toArray()) || [];
 
   const formatAmount = (cents: number) => formatCurrency(cents, defaultCurrency);
   const isLoading = !accounts || !categories || !transactions;
-
-  useEffect(() => {
-    if (currentTab === 4) setSettingsMounted(true);
-  }, [currentTab]);
 
   if (isLoading) {
     return (
@@ -69,26 +88,11 @@ export const Dashboard: React.FC = () => {
               KANJOOS
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Welcome back, Abhishek
+              Welcome back, {username}
             </Typography>
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Button
-              onClick={(e) => setAnchorEl(e.currentTarget)}
-              variant="outlined"
-              startIcon={<Settings size={16} />}
-              sx={{ borderRadius: '12px', fontWeight: 700, textTransform: 'none' }}
-            >
-              {defaultCurrency}
-            </Button>
-            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-              {['INR', 'USD', 'EUR', 'GBP'].map((curr) => (
-                <MenuItem key={curr} onClick={() => { updateDefaultCurrency(curr); setAnchorEl(null); }}>
-                  {curr}
-                </MenuItem>
-              ))}
-            </Menu>
           </Box>
         </Container>
       </Box>
@@ -100,23 +104,22 @@ export const Dashboard: React.FC = () => {
         {currentTab === 2 && <StatsTab transactions={transactions} categories={categories} format={formatAmount} />}
         {currentTab === 3 && <AccountsTab accounts={accounts} format={formatAmount} />}
 
-        {settingsMounted && (
+        {currentTab === 4 && (
           <>
-            <Box sx={{ display: currentTab === 4 && settingsView === 'categories' ? 'block' : 'none' }}>
+            <Box sx={{ display: settingsView === 'categories' ? 'block' : 'none' }}>
               <CategoriesTab
                 categories={categories}
                 onBack={() => setSettingsView('main')}
               />
             </Box>
-            <Box sx={{ display: currentTab === 4 && settingsView === 'main' ? 'block' : 'none' }}>
+            <Box sx={{ display: settingsView === 'main' ? 'block' : 'none' }}>
               <SettingsTab onNavigateToCategories={() => setSettingsView('categories')} />
             </Box>
           </>
         )}
       </Container>
 
-      {/* FAB - Floating action button on Left Bottom Side */}
-      {/* Rendered conditionally ONLY on Summary (Tab 0) and Transactions (Tab 1) */}
+      {/* FAB - Floating action button */}
       {(currentTab === 0 || currentTab === 1) && (
         <Fab
           color="primary"
@@ -125,7 +128,7 @@ export const Dashboard: React.FC = () => {
           sx={{
             position: 'fixed',
             right: 24,
-            bottom: { xs: 88, md: 24 }, // Responsive adjustments to clear bottom nav
+            bottom: { xs: 88, md: 24 },
             boxShadow: 4,
           }}
         >

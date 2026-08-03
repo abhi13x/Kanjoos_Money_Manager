@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { Transaction, Account, Category } from '@/db/schema';
 import { db } from '@/db/schema';
+import { deleteTransaction } from '@/services/financeService';
 
 interface TransactionsTabProps {
   transactions: Transaction[];
@@ -75,7 +76,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
 
   const handleDelete = async () => {
     if (deleteId) {
-      await db.transactions.delete(deleteId);
+      try {
+        await deleteTransaction(deleteId);
+      } catch (err) {
+        console.error('Failed to delete transaction:', err);
+        alert('Error deleting transaction. Please try again.');
+      }
       setDeleteId(null);
     }
   };
