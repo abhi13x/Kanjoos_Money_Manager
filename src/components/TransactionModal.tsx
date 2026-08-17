@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
+import { addTransactionWithSync, updateTransactionWithSync } from '@/services/financeService';
 import { 
   Dialog, DialogTitle, DialogContent, Box, IconButton, TextField, 
   MenuItem, Button, ToggleButton, ToggleButtonGroup, 
@@ -11,9 +12,10 @@ import { X, Calendar, Tag, CreditCard, ArrowRightLeft, FileText } from 'lucide-r
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editTransaction?: any;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, editTransaction }) => {
   const [type, setType] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState('');
@@ -24,6 +26,32 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
   const [description, setDescription] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatInterval, setRepeatInterval] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+
+  useEffect(() => {
+    if (isOpen && editTransaction) {
+      setType(editTransaction.type);
+      setAmount((editTransaction.amount / 100).toFixed(2));
+      setAccountId(editTransaction.accountId);
+      setToAccountId(editTransaction.toAccountId || '');
+      setCategoryId(editTransaction.categoryId || '');
+      setDate(new Date(editTransaction.date).toISOString().split('T')[0]);
+      setNote(editTransaction.note || '');
+      setDescription(editTransaction.description || '');
+      setIsRecurring(editTransaction.isRecurring || false);
+      setRepeatInterval(editTransaction.repeatInterval || 'none');
+    } else if (isOpen) {
+      setType('expense');
+      setAmount('');
+      setAccountId('');
+      setToAccountId('');
+      setCategoryId('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setNote('');
+      setDescription('');
+      setIsRecurring(false);
+      setRepeatInterval('monthly');
+    }
+  }, [isOpen, editTransaction]);
 
   const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
@@ -45,10 +73,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
     const amountCents = Math.round(parseFloat(amount) * 100);
 
     try {
-      await db.transaction('rw', [db.transactions, db.accounts], async () => {
-        // Create transactional logging profile
-        await db.transactions.add({
-          id: crypto.randomUUID(),
+      if (editTransaction) {
+        await updateTransactionWithSync(editTransaction.id, {
           amount: amountCents,
           type,
           accountId,
@@ -60,25 +86,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
           isRecurring,
           repeatInterval: isRecurring ? repeatInterval : 'none',
         });
-
-        // Live Balance calculations
-        const srcAccount = await db.accounts.get(accountId);
-        if (srcAccount) {
-          const multiplier = type === 'income' ? 1 : -1;
-          await db.accounts.update(accountId, {
-            currentBalance: srcAccount.currentBalance + (amountCents * multiplier),
-          });
-        }
-
-        if (type === 'transfer' && toAccountId) {
-          const targetAccount = await db.accounts.get(toAccountId);
-          if (targetAccount) {
-            await db.accounts.update(toAccountId, {
-              currentBalance: targetAccount.currentBalance + amountCents,
-            });
-          }
-        }
-      });
+      } else {
+        await addTransactionWithSync({
+          amount: amountCents,
+          type,
+          accountId,
+          toAccountId: type === 'transfer' ? toAccountId : undefined,
+          categoryId: type === 'transfer' ? undefined : categoryId,
+          date: new Date(date).getTime(),
+          note,
+          description,
+          isRecurring,
+          repeatInterval: isRecurring ? repeatInterval : 'none',
+        });
+      }
 
       // Reset local state fields
       setAmount('');
@@ -109,7 +130,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
     >
       <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography component="span" variant="h6" sx={{ fontWeight: 800 }}>
-          Add Entry
+          {editTransaction ? 'Edit Entry' : 'Add Entry'}
         </Typography>
         <IconButton onClick={onClose} size="small" sx={{ color: 'text.secondary' }}>
           <X size={20} />

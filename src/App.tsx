@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ThemeProvider, CssBaseline } from '@mui/material'
+import { ThemeProvider, CssBaseline, Box } from '@mui/material'
 import Dashboard from './components/Dashboard'
 import TransactionModal from './components/TransactionModal'
 import { GDriveSyncService } from './services/gdriveSync'
@@ -16,20 +16,37 @@ function App() {
     if (syncService.hasCachedSession()) {
       syncService.startAutoSync();
     }
+
+    const handleEditModal = (e: any) => {
+      handleOpenModal(e.detail);
+    };
+
+    window.addEventListener('open-edit-modal', handleEditModal);
+    return () => window.removeEventListener('open-edit-modal', handleEditModal);
   }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editTransaction, setEditTransaction] = useState<any>(null);
+
+  const handleOpenModal = (tx?: any) => {
+    setEditTransaction(tx);
+    setIsModalOpen(true);
+  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div className="app-container">
+      <Box sx={{ minHeight: '100vh' }}>
         <Dashboard />
         <TransactionModal 
           isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditTransaction(null);
+          }} 
+          editTransaction={editTransaction}
         />
-      </div>
+      </Box>
     </ThemeProvider>
   )
 }

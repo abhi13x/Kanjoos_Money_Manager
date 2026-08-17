@@ -1,6 +1,6 @@
-// src/services/financeService.ts
 import { db, type Transaction } from '@/db/schema';
 import { fromCents } from '@/types/finance';
+import { GDriveSyncService } from '@/services/gdriveSync';
 
 /**
  * Service layer for financial operations.
@@ -48,6 +48,99 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
     
     return transaction;
   });
+};
+
+const triggerBackgroundSync = async () => {
+  try {
+    const syncService = GDriveSyncService.getInstance();
+    if (syncService.hasValidAccessToken()) {
+      syncService.sync().catch(err => console.warn('Background sync triggered by data change failed:', err));
+    }
+  } catch (e) {
+    console.error('Error triggering background sync:', e);
+  }
+};
+
+export const addTransactionWithSync = async (transactionData: Omit<Transaction, 'id'>): Promise<Transaction> => {
+  const tx = await addTransaction(transactionData);
+  triggerBackgroundSync();
+  return tx;
+};
+
+export const updateTransactionWithSync = async (id: string, transactionData: Partial<Transaction>): Promise<Transaction> => {
+  const updatedTx = await updateTransaction(id, transactionData);
+  triggerBackgroundSync();
+  return updatedTx;
+};
+
+export const updateTransaction = async (id: string, updateData: Partial<Transaction>): Promise<Transaction> => {
+  return await db.transaction('rw', [db.transactions, db.accounts], async () => {
+    const oldTx = await db.transactions.get(id);
+    if (!oldTx) throw new Error('Transaction not found');
+
+    // 1. Revert balances of the old transaction
+    if (oldTx.type === 'income') {
+      const acc = await db.accounts.get(oldTx.accountId);
+      if (acc) {
+        const currentVal = acc.currentBalance ?? acc.initialBalance;
+        await db.accounts.update(acc.id, { currentBalance: currentVal - oldTx.amount });
+      }
+    } else if (oldTx.type === 'expense') {
+      const acc = await db.accounts.get(oldTx.accountId);
+      if (acc) {
+        const currentVal = acc.currentBalance ?? acc.initialBalance;
+        await db.accounts.update(acc.id, { currentBalance: currentVal + oldTx.amount });
+      }
+    } else if (oldTx.type === 'transfer' && oldTx.toAccountId) {
+      const sourceAcc = await db.accounts.get(oldTx.accountId);
+      if (sourceAcc) {
+        const currentVal = sourceAcc.currentBalance ?? sourceAcc.initialBalance;
+        await db.accounts.update(sourceAcc.id, { currentBalance: currentVal + oldTx.amount });
+      }
+      const targetAcc = await db.accounts.get(oldTx.toAccountId);
+      if (targetAcc) {
+        const currentVal = targetAcc.currentBalance ?? targetAcc.initialBalance;
+        await db.accounts.update(targetAcc.id, { currentBalance: currentVal - oldTx.amount });
+      }
+    }
+
+    // 2. Update the transaction
+    const newTx = { ...oldTx, ...updateData };
+    await db.transactions.update(id, newTx);
+
+    // 3. Apply balances for the new transaction
+    if (newTx.type === 'income') {
+      const acc = await db.accounts.get(newTx.accountId);
+      if (acc) {
+        const currentVal = acc.currentBalance ?? acc.initialBalance;
+        await db.accounts.update(acc.id, { currentBalance: currentVal + newTx.amount });
+      }
+    } else if (newTx.type === 'expense') {
+      const acc = await db.accounts.get(newTx.accountId);
+      if (acc) {
+        const currentVal = acc.currentBalance ?? acc.initialBalance;
+        await db.accounts.update(acc.id, { currentBalance: currentVal - newTx.amount });
+      }
+    } else if (newTx.type === 'transfer' && newTx.toAccountId) {
+      const sourceAcc = await db.accounts.get(newTx.accountId);
+      if (sourceAcc) {
+        const currentVal = sourceAcc.currentBalance ?? sourceAcc.initialBalance;
+        await db.accounts.update(sourceAcc.id, { currentBalance: currentVal - newTx.amount });
+      }
+      const targetAcc = await db.accounts.get(newTx.toAccountId);
+      if (targetAcc) {
+        const currentVal = targetAcc.currentBalance ?? targetAcc.initialBalance;
+        await db.accounts.update(targetAcc.id, { currentBalance: currentVal + newTx.amount });
+      }
+    }
+
+    return newTx;
+  });
+};
+
+export const deleteTransactionWithSync = async (id: string): Promise<void> => {
+  await deleteTransaction(id);
+  triggerBackgroundSync();
 };
 
 export const deleteTransaction = async (id: string): Promise<void> => {

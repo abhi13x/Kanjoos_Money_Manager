@@ -7,7 +7,7 @@ import { formatCurrency } from '@/types/finance';
 // Tabs Components Imports
 import { SummaryTab } from './SummaryTab';
 import { TransactionsTab } from './TransactionTab';
-import { StatsTab } from './StatsTab';
+import { StatsTab } from './StatsTab/StatsTab';
 import { AccountsTab } from './AccountsTab';
 import { SettingsTab } from './SettingsTab';
 import { CategoriesTab } from './CategoriesTab';

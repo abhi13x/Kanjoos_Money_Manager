@@ -26,7 +26,7 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
   const assetTypes = ['cash', 'savings', 'wallet', 'mutual_fund', 'stock', 'fd_rd', 'scheme'];
   const totalAssets = accounts
     .filter((acc) => assetTypes.includes(acc.type))
-    .reduce((sum, acc) => sum + acc.currentBalance, 0);
+    .reduce((sum, acc) => sum + (acc.currentBalance ?? acc.initialBalance), 0);
 
   // Credit Card Usage Balance Tracking
   const creditCards = accounts.filter((acc) => acc.type === 'credit_card');
