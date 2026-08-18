@@ -1,8 +1,6 @@
 import React from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   MenuItem,
   InputLabel,
@@ -13,7 +11,6 @@ import {
 } from '@mui/material';
 import {
   PieChart,
-  PiePlot,
 } from '@mui/x-charts';
 import { PieChart as PieIcon } from 'lucide-react';
 import { MONTHS } from '@/constants/statsTab';
@@ -68,10 +65,10 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
   const theme = useTheme();
   // Calculate pie slices inline since it's view-specific logic
   const pieSlices = React.useMemo((): PieSlice[] => {
-    // Drill down: If a specific category is selected, show its subcategories in the chart
+    // Drill down: if a specific category is selected, show its subcategories in the chart
     if (selectedCategory !== 'all' && categoryBreakdown.length > 0) {
-      const parent = categoryBreakdown[0];
-      if (parent.subCategories.length > 0) {
+      const parent = categoryBreakdown.find((item) => item.id === selectedCategory) ?? categoryBreakdown[0];
+      if (parent?.subCategories.length) {
         return parent.subCategories.map((sub, idx) => ({
           id: sub.id,
           name: sub.name,
@@ -89,231 +86,215 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
       percentage: item.percentage,
       color: item.color,
     }));
-  }, [categoryBreakdown, totalBreakdownAmount]);
+  }, [categoryBreakdown, selectedCategory, totalBreakdownAmount]);
 
   return (
-    <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', height: '100%' }}>
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 1.5, mb: 3 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PieIcon size={18} /> Category Breakdown
-          </Typography>
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3, px: { xs: 0, sm: 1 }, py: 0 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PieIcon size={18} /> Category Breakdown
+        </Typography>
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel id="breakdown-month-label">Month</InputLabel>
-              <Select
-                labelId="breakdown-month-label"
-                value={breakdownMonth}
-                label="Month"
-                onChange={(e) => setBreakdownMonth(Number(e.target.value))}
-                sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
-              >
-                {MONTHS.map((monthName, idx) => (
-                  <MenuItem key={monthName} value={idx}>
-                    {monthName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="breakdown-month-label">Month</InputLabel>
+            <Select
+              labelId="breakdown-month-label"
+              value={breakdownMonth}
+              label="Month"
+              onChange={(e) => setBreakdownMonth(Number(e.target.value))}
+              sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+            >
+              {MONTHS.map((monthName, idx) => (
+                <MenuItem key={monthName} value={idx}>
+                  {monthName}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 90 }}>
-              <InputLabel id="breakdown-year-label">Year</InputLabel>
-              <Select
-                labelId="breakdown-year-label"
-                value={breakdownYear}
-                label="Year"
-                onChange={(e) => setBreakdownYear(Number(e.target.value))}
-                sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
-              >
-                {availableYears.map((year) => (
-                  <MenuItem key={year} value={year}>
-                    {year}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
+          <FormControl size="small" sx={{ minWidth: 90 }}>
+            <InputLabel id="breakdown-year-label">Year</InputLabel>
+            <Select
+              labelId="breakdown-year-label"
+              value={breakdownYear}
+              label="Year"
+              onChange={(e) => setBreakdownYear(Number(e.target.value))}
+              sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+            >
+              {availableYears.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
+      </Box>
 
-        {categoryBreakdown.length === 0 ? (
-          <Typography variant="body2" sx={{ color: 'text.secondary', py: 6, textAlign: 'center' }}>
-            No {statType}s recorded for {MONTHS[breakdownMonth]} {breakdownYear}.
-          </Typography>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 1, position: 'relative' }}>
+      {categoryBreakdown.length === 0 ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary', py: 6, textAlign: 'center' }}>
+          No {statType}s recorded for {MONTHS[breakdownMonth]} {breakdownYear}.
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+          {/* Total Amount at Top */}
+          <Box sx={{ textAlign: 'center', py: 2, px: 2, borderRadius: '12px', bgcolor: 'action.hover' }}>
+            <Typography variant="caption" sx={{ fontSize: '0.75rem', color: 'text.secondary', fontWeight: 700, display: 'block', mb: 0.5 }}>
+              TOTAL {statType.toUpperCase()}
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 900, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+              {format(totalBreakdownAmount)}
+            </Typography>
+          </Box>
+
+          {/* Two Column Layout: Pie + Labels */}
+          <Box sx={{ display: 'flex', gap: 3, flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+            {/* Center: Pie Chart */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               <Box
                 sx={{
-                  width: '80%',
+                  width: { xs: 260, sm: 320, md: 360 },
                   aspectRatio: '1 / 1',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  position: 'relative',
+                  flexShrink: 0,
                 }}
               >
                 <PieChart
-                  sx={{ width: '100%', height: '100%' }}
                   series={[{ 
                     id: 'breakdown', 
-                    type: 'pie' as const,
                     data: pieSlices.map((slice, idx) => ({
                       id: idx,
                       value: slice.percentage,
                       color: slice.color,
-                      label: slice.name,
                     })),
-                    innerRadius: 0.5,
-                    outerRadius: '100%',
-                    arcLabel: (item) => `${item.label} ${item.value.toFixed(1)}%`,
-                    arcLabelRadius: '75%',
+                    innerRadius: 45,
+                    outerRadius: 95,
+                    paddingAngle: 2,
                     cornerRadius: 4,
                   }]}
-                >
-                  <PiePlot
-                    slotProps={{
-                      pieArc: {
-                        stroke: theme.palette.background.paper,
-                        strokeWidth: 2,
-                      }
-                    }}
-                  />
-                </PieChart>
-              </Box>
-              <Box
-                sx={{
-                  position: 'absolute',
-                  textAlign: 'center',
-                  pointerEvents: 'none',
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary', fontWeight: 700, display: 'block' }}>
-                  TOTAL
-                </Typography>
-                <Typography variant="subtitle2" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-                  {format(totalBreakdownAmount)}
-                </Typography>
+                  width={320}
+                  height={320}
+                  margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                />
               </Box>
             </Box>
 
-            {/* Render Parent Categories and their nested Subcategories */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {categoryBreakdown.map((item) => {
-                const isSelected = selectedCategory === item.id;
-                return (
+            {/* Category Labels List */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+            {categoryBreakdown.map((item) => {
+              const isSelected = selectedCategory === item.id;
+              return (
+                <Box
+                  key={item.id}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    bgcolor: isSelected ? 'action.selected' : 'action.hover',
+                    border: '1px solid',
+                    borderColor: isSelected ? 'primary.main' : 'divider',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
                   <Box
-                    key={item.id}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: '12px',
-                      bgcolor: isSelected ? 'action.selected' : 'action.hover',
-                      border: '1px solid',
-                      borderColor: isSelected ? 'primary.main' : 'divider',
-                      transition: 'all 0.2s ease',
-                    }}
+                    onClick={() => setSelectedCategory(isSelected ? 'all' : item.id)}
+                    sx={{ cursor: 'pointer' }}
                   >
-                    {/* Main Parent Category Row */}
-                    <Box
-                      onClick={() => setSelectedCategory(isSelected ? 'all' : item.id)}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: item.color }} />
-                          {item.name}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8, gap: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Box component="span" sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
+                        {item.name}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 800, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {format(item.amount)}{' '}
+                        <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>
+                          ({item.percentage.toFixed(1)}%)
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                          {format(item.amount)}{' '}
-                          <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                            ({item.percentage.toFixed(1)}%)
-                          </Typography>
-                        </Typography>
-                      </Box>
-                      <LinearProgress
-                        variant="determinate"
-                        value={item.percentage}
-                        sx={{
-                          height: 6,
-                          borderRadius: 3,
-                          bgcolor: 'background.paper',
-                          '& .MuiLinearProgress-bar': {
-                            borderRadius: 3,
-                            backgroundColor: item.color,
-                          },
-                        }}
-                      />
+                      </Typography>
                     </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={item.percentage}
+                      sx={{
+                        height: 6,
+                        borderRadius: 3,
+                        bgcolor: 'background.paper',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 3,
+                          backgroundColor: item.color,
+                        },
+                      }}
+                    />
+                  </Box>
 
-                    {/* Nested Subcategories Container */}
-                    {item.subCategories.length > 0 && (
-                      <Box
-                        sx={{
-                          pl: 2,
-                          mt: 1.5,
-                          pt: 1,
-                          pb: 0.5,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 1,
-                          borderLeft: '2px dashed',
-                          borderColor: 'primary.main',
-                        }}
-                      >
-                        {item.subCategories.map((sub) => {
-                          const isSubSelected = selectedCategory === sub.id;
-                          return (
-                            <Box
-                              key={sub.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCategory(isSubSelected ? 'all' : sub.id);
-                              }}
+                  {item.subCategories.length > 0 && (
+                    <Box
+                      sx={{
+                        pl: 2,
+                        mt: 1.5,
+                        pt: 1,
+                        pb: 0.5,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1,
+                        borderLeft: '2px dashed',
+                        borderColor: 'primary.main',
+                      }}
+                    >
+                      {item.subCategories.map((sub) => {
+                        const isSubSelected = selectedCategory === sub.id;
+                        return (
+                          <Box
+                            key={sub.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCategory(isSubSelected ? 'all' : sub.id);
+                            }}
+                            sx={{
+                              cursor: 'pointer',
+                              p: 1,
+                              px: 1.5,
+                              borderRadius: '8px',
+                              bgcolor: isSubSelected ? 'action.selected' : 'background.paper',
+                              border: '1px solid',
+                              borderColor: isSubSelected ? 'primary.main' : 'divider',
+                              '&:hover': { borderColor: 'primary.main' },
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
                               sx={{
-                                cursor: 'pointer',
-                                p: 1,
-                                px: 1.5,
-                                borderRadius: '8px',
-                                bgcolor: isSubSelected ? 'action.selected' : 'background.paper',
-                                border: '1px solid',
-                                borderColor: isSubSelected ? 'primary.main' : 'divider',
-                                '&:hover': { borderColor: 'primary.main' },
+                                fontWeight: 700,
+                                color: isSubSelected ? 'primary.main' : 'text.primary',
                                 display: 'flex',
-                                justifyContent: 'space-between',
                                 alignItems: 'center',
+                                gap: 1,
+                                fontSize: '0.82rem',
                               }}
                             >
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontWeight: 700,
-                                  color: isSubSelected ? 'primary.main' : 'text.primary',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 1,
-                                  fontSize: '0.82rem',
-                                }}
-                              >
-                                <span style={{ color: theme.palette.text.secondary }}>↳</span> {sub.name}
+                              <span style={{ color: theme.palette.text.secondary }}>↳</span> {sub.name}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                              {format(sub.amount)}{' '}
+                              <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontSize: '0.72rem' }}>
+                                ({sub.percentageOfTotal.toFixed(1)}%)
                               </Typography>
-                              <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.82rem' }}>
-                                {format(sub.amount)}{' '}
-                                <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontSize: '0.72rem' }}>
-                                  ({sub.percentageOfTotal.toFixed(1)}%)
-                                </Typography>
-                              </Typography>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    )}
-                  </Box>
-                );
-              })}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
             </Box>
           </Box>
-        )}
-      </CardContent>
-    </Card>
+        </Box>
+      )}
+    </Box>
   );
 };

@@ -4,10 +4,11 @@ import { db } from '@/db/schema';
 import { addTransactionWithSync, updateTransactionWithSync } from '@/services/financeService';
 import { 
   Dialog, DialogTitle, DialogContent, Box, IconButton, TextField, 
-  MenuItem, Button, ToggleButton, ToggleButtonGroup, 
+  MenuItem, Button, ToggleButton, ToggleButtonGroup,
+  List, ListItemButton, ListItemIcon, ListItemText,
   InputAdornment, Typography, FormControlLabel, Checkbox 
 } from '@mui/material';
-import { X, Calendar, Tag, CreditCard, ArrowRightLeft, FileText } from 'lucide-react';
+import { X, Calendar, Tag, CreditCard, ArrowRightLeft, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -57,7 +58,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
 
   const handleTypeChange = (
-    _event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement> | null,
     newType: 'expense' | 'income' | 'transfer' | null
   ) => {
     if (newType !== null) {
@@ -140,24 +141,52 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
       <DialogContent sx={{ borderTop: 'none', px: 3, py: 2 }}>
         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           
-          <ToggleButtonGroup
-            value={type}
-            exclusive
-            onChange={handleTypeChange}
-            fullWidth
-            size="small"
-            sx={{
-              bgcolor: 'action.hover', p: 0.5, borderRadius: '12px', border: 'none',
-              '& .MuiToggleButtonGroup-grouped': {
-                border: 0, borderRadius: '8px !important', textTransform: 'capitalize', fontWeight: 700,
-                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: 1, color: 'primary.main' }
-              }
-            }}
-          >
-            <ToggleButton value="expense">Expense</ToggleButton>
-            <ToggleButton value="income">Income</ToggleButton>
-            <ToggleButton value="transfer">Transfer</ToggleButton>
-          </ToggleButtonGroup>
+          <List sx={{ bgcolor: 'action.hover', p: 1, borderRadius: '12px' }} component="div">
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'expense')}
+              selected={type === 'expense'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'expense' ? 'background.paper' : 'transparent',
+                color: type === 'expense' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <TrendingDown sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              <ListItemText primary="Expense" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+            
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'income')}
+              selected={type === 'income'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'income' ? 'background.paper' : 'transparent',
+                color: type === 'income' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <TrendingUp sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              <ListItemText primary="Income" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+            
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'transfer')}
+              selected={type === 'transfer'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'transfer' ? 'background.paper' : 'transparent',
+                color: type === 'transfer' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <ArrowRightLeft sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              <ListItemText primary="Transfer" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+          </List>
 
           <TextField
             label="Amount"

@@ -1,17 +1,11 @@
 import React from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   useTheme,
 } from '@mui/material';
 import {
   BarChart,
-  ChartsXAxis,
-  ChartsYAxis,
-  ChartsGrid,
-  ChartsTooltip,
 } from '@mui/x-charts';
 import { BarChart3 } from 'lucide-react';
 
@@ -21,117 +15,76 @@ interface TemporalVolumesChartProps {
     val: number;
     rawKey: string;
   }>;
-  barYAxis: {
-    ticks: number[];
-    max: number;
-  };
   groupBy: 'month' | 'year';
 }
 
 export const TemporalVolumesChart: React.FC<TemporalVolumesChartProps> = ({
   periodicData,
-  barYAxis,
   groupBy,
 }) => {
   const theme = useTheme();
   
-  // Transform data for MUI X Charts - series format
-  const dataset = React.useMemo(() => periodicData.map((d) => ({
-    label: d.label,
-    value: d.val,
-    rawKey: d.rawKey,
-  })), [periodicData]);
+  // Color palette for bars
+  const colors = [
+    '#1976D2', '#D32F2F', '#388E3C', '#F57C00', '#7B1FA2',
+    '#00796B', '#C2185B', '#0097A7', '#6A1B9A', '#00695C',
+    '#FF6F00', '#5E35B1', '#0288D1', '#E53935', '#43A047',
+  ];
   
-  const series = React.useMemo(() => [{
-    id: 'volumes',
-    dataKey: 'value',
-  }], []);
-
-  // Axis configuration for MUI X Charts v7+
-  const xAxis = React.useMemo(() => ([{
-    id: 'x-axis',
-    dataKey: 'label',
-    scaleType: 'band' as const,
-    label: groupBy.toUpperCase(),
-  }]), [groupBy]);
-
-  const yAxis = React.useMemo(() => ([{
-    id: 'y-axis',
-    dataKey: 'value',
-    scaleType: 'linear' as const,
-    label: 'Amount',
-    min: 0,
-    max: barYAxis.max,
-  }]), [barYAxis.max]);
-
+  // Format dataset for MUI BarChart
+  const dataset = React.useMemo(() => 
+    periodicData.length > 0 ? periodicData.map((d) => ({
+      period: d.label,
+      amount: d.val,
+    })) : [],
+  [periodicData]);
+  
   return (
-    <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', height: '100%' }}>
-      <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <BarChart3 size={18} /> Temporal Volumes ({groupBy.toUpperCase()})
-        </Typography>
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2, px: { xs: 0, sm: 1 }, py: 0 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <BarChart3 size={18} /> Temporal Volumes ({groupBy.toUpperCase()})
+      </Typography>
 
-        {periodicData.length === 0 ? (
-          <Typography variant="body2" sx={{ color: 'text.secondary', py: 6, textAlign: 'center', my: 'auto' }}>
-            No historical volume data available.
-          </Typography>
-        ) : (
-          <Box sx={{ flexGrow: 1, width: '100%', aspectRatio: '4 / 3', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Box sx={{ width: '100%', height: '100%' }}>
-              <BarChart
-                series={series}
-                dataset={dataset}
-                xAxis={xAxis}
-                yAxis={yAxis}
-                sx={{ width: '100%', height: '100%' }}
-                margin={{ top: 20, right: 20, bottom: 60, left: 60 }}
-                layout="vertical"
-              >
-                <ChartsXAxis
-                  axisId="x-axis"
-                  tickLabelStyle={{ 
-                    fontSize: 11, 
-                    fill: theme.palette.text.secondary,
-                    textAnchor: 'middle',
-                  }}
-                  slotProps={{
-                    axisLine: { stroke: theme.palette.divider },
-                    axisTick: { stroke: theme.palette.divider },
-                    axisTickLabel: { 
-                      fontSize: 11, 
-                      fill: theme.palette.text.secondary,
-                      dx: 0,
-                      dy: 8,
-                      textAnchor: 'middle',
-                    },
-                  }}
-                />
-                <ChartsYAxis
-                  axisId="y-axis"
-                  tickLabelStyle={{ 
-                    fontSize: 11, 
-                    fill: theme.palette.text.secondary,
-                    textAnchor: 'end',
-                  }}
-                  slotProps={{
-                    axisLine: { stroke: theme.palette.divider },
-                    axisTick: { stroke: theme.palette.divider },
-                    axisTickLabel: { 
-                      fontSize: 11, 
-                      fill: theme.palette.text.secondary,
-                      dx: -8,
-                      dy: 0,
-                      textAnchor: 'end',
-                    },
-                  }}
-                />
-                <ChartsGrid vertical={false} horizontal />
-                <ChartsTooltip trigger="item" />
-              </BarChart>
-            </Box>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
+      {periodicData.length === 0 ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary', py: 6, textAlign: 'center' }}>
+          No historical volume data available.
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+          <BarChart
+            dataset={dataset}
+            series={periodicData.map((_, idx) => ({
+              dataKey: 'amount',
+              label: ``,
+              color: colors[idx % colors.length],
+              valueFormatter: (value: number | null) => 
+                value !== null ? `₹${(value / 100).toLocaleString()}` : '',
+            }))}
+            xAxis={[
+              { 
+                scaleType: 'band',
+                dataKey: 'period',
+              }
+            ]}
+            width={400}
+            height={300}
+            margin={{ top: 20, right: 20, bottom: 50, left: 60 }}
+            sx={{
+              '& .MuiChartsLegend-root': {
+                display: 'none',
+              },
+              '& .MuiChartsAxis-bottom .MuiChartsAxis-tickLabelStyle': {
+                fontSize: 11,
+                fill: theme.palette.text.secondary,
+              },
+              '& .MuiChartsAxis-left .MuiChartsAxis-tickLabelStyle': {
+                fontSize: 11,
+                fill: theme.palette.text.secondary,
+              }
+            }}
+          />
+        </Box>
+      )}
+    </Box>
   );
 };
