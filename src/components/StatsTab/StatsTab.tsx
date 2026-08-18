@@ -98,9 +98,9 @@ export const StatsTab: React.FC<StatsTabProps> = ({ transactions, categories, fo
         </Tabs>
         
         {/* Tab Panels */}
-        <Box sx={{ p: 3, flexGrow: 1, overflow: 'hidden' }}>
+        <Box sx={{ p: { xs: 2, sm: 3 }, flexGrow: 1, overflow: 'hidden' }}>
           {activeTab === 0 && (
-            <Box sx={{ width: '100%', maxWidth: 800, height: '60vh', mt: 2, mx: 'auto' }}>
+            <Box sx={{ width: '100%', minHeight: { xs: '50vh', sm: '60vh' }, mt: 2 }}>
               <CategoryBreakdownChart
                 categoryBreakdown={categoryBreakdown}
                 totalBreakdownAmount={totalBreakdownAmount}
@@ -118,7 +118,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ transactions, categories, fo
           )}
           
           {activeTab === 1 && (
-            <Box sx={{ width: '100%', maxWidth: 800, height: '60vh', mt: 2, mx: 'auto' }}>
+            <Box sx={{ width: '100%', maxWidth: { xs: 400, sm: 600, md: 800 }, height: { xs: '40vh', sm: '50vh', md: '60vh' }, mt: 2, mx: 'auto' }}>
               <TemporalVolumesChart
                 periodicData={periodicData}
                 barYAxis={barYAxis}
@@ -128,7 +128,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({ transactions, categories, fo
           )}
           
           {activeTab === 2 && (
-            <Box sx={{ width: '100%', maxWidth: 800, height: '60vh', mt: 2, mx: 'auto' }}>
+            <Box sx={{ width: '100%', maxWidth: { xs: 400, sm: 600, md: 800 }, height: { xs: '40vh', sm: '50vh', md: '60vh' }, mt: 2, mx: 'auto' }}>
               <TimelineChart
                 timelineData={timelineData}
                 lineYAxis={lineYAxis}
