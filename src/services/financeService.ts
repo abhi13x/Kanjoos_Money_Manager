@@ -8,6 +8,7 @@ import { GDriveSyncService } from '@/services/gdriveSync';
  */
 
 export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): Promise<Transaction> => {
+  console.log('addTransaction called with:', transactionData);
   return await db.transaction('rw', [db.transactions, db.accounts], async () => {
     const id = crypto.randomUUID();
     const transaction = { ...transactionData, id } as Transaction;
@@ -18,9 +19,9 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
     if (transactionData.type === 'income') {
       const acc = await db.accounts.get(transactionData.accountId);
       if (acc) {
-        await db.accounts.update(acc.id, { 
-          currentBalance: (acc.currentBalance ?? acc.initialBalance) + transactionData.amount 
-        });
+        const currentVal = acc.currentBalance ?? acc.initialBalance;
+        await db.accounts.update(acc.id, { currentBalance: currentVal + transactionData.amount });
+        console.log('Income: updated account', acc.id, 'new balance:', (acc.currentBalance ?? acc.initialBalance) + transactionData.amount);
       }
     } else if (transactionData.type === 'expense') {
       const acc = await db.accounts.get(transactionData.accountId);
@@ -28,6 +29,7 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
         await db.accounts.update(acc.id, { 
           currentBalance: (acc.currentBalance ?? acc.initialBalance) - transactionData.amount 
         });
+        console.log('Expense: updated account', acc.id, 'new balance:', (acc.currentBalance ?? acc.initialBalance) - transactionData.amount);
       }
     } else if (transactionData.type === 'transfer' && transactionData.toAccountId) {
       // Source Account (Decrease)
@@ -36,6 +38,7 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
         await db.accounts.update(sourceAcc.id, { 
           currentBalance: (sourceAcc.currentBalance ?? sourceAcc.initialBalance) - transactionData.amount 
         });
+        console.log('Transfer: updated source account', sourceAcc.id, 'new balance:', (sourceAcc.currentBalance ?? sourceAcc.initialBalance) - transactionData.amount);
       }
       // Target Account (Increase)
       const targetAcc = await db.accounts.get(transactionData.toAccountId);
@@ -43,6 +46,7 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
         await db.accounts.update(targetAcc.id, { 
           currentBalance: (targetAcc.currentBalance ?? targetAcc.initialBalance) + transactionData.amount 
         });
+        console.log('Transfer: updated target account', targetAcc.id, 'new balance:', (targetAcc.currentBalance ?? targetAcc.initialBalance) + transactionData.amount);
       }
     }
     
