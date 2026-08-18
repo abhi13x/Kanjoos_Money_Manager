@@ -4,7 +4,7 @@ import { db } from '@/db/schema';
 import { addTransactionWithSync, updateTransactionWithSync } from '@/services/financeService';
 import { 
   Dialog, DialogTitle, DialogContent, Box, IconButton, TextField, 
-  MenuItem, Button, ToggleButton, ToggleButtonGroup,
+  MenuItem, Button,
   List, ListItemButton, ListItemIcon, ListItemText,
   InputAdornment, Typography, FormControlLabel, Checkbox 
 } from '@mui/material';
@@ -152,7 +152,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <TrendingDown sx={{ fontSize: 20 }} />
+                <TrendingDown size={20} />
               </ListItemIcon>
               <ListItemText primary="Expense" sx={{ fontWeight: 600 }} />
             </ListItemButton>
@@ -167,7 +167,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <TrendingUp sx={{ fontSize: 20 }} />
+                <TrendingUp size={20} />
               </ListItemIcon>
               <ListItemText primary="Income" sx={{ fontWeight: 600 }} />
             </ListItemButton>
@@ -182,7 +182,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <ArrowRightLeft sx={{ fontSize: 20 }} />
+                <ArrowRightLeft size={20} />
               </ListItemIcon>
               <ListItemText primary="Transfer" sx={{ fontWeight: 600 }} />
             </ListItemButton>
