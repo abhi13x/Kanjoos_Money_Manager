@@ -3,8 +3,8 @@ import {
   Box, Card, CardContent, Typography,
   Grid, TextField, Button, MenuItem, Alert, Stack,
   List, ListItemButton, ListItemIcon, ListItemText, Chip,
+  Divider,
 } from '@mui/material';
-import Divider from '@mui/divider';
 import {
   Globe, Cloud, Upload, Download, LogOut,
   LogIn, Tag, ChevronRight, CheckCircle2
