@@ -79,7 +79,7 @@ For a deep dive into the technical architecture, code flow, and logic, please re
 1. Clone the repository.
 2. Install dependencies:
    ```bash
-   npm install
+   bun install
    ```
 3. Set up your Google Client ID in a `.env` file:
    ```env
@@ -87,5 +87,5 @@ For a deep dive into the technical architecture, code flow, and logic, please re
    ```
 4. Start the development server:
    ```bash
-   npm run dev
+   bun run dev
    ```

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Card, CardContent, Typography,
   Grid, TextField, Button, MenuItem, Alert, Stack,
-  List, ListItemButton, ListItemIcon, ListItemText, Divider, Chip,
+  List, ListItemButton, ListItemIcon, ListItemText, Chip,
 } from '@mui/material';
+import Divider from '@mui/divider';
 import {
   Globe, Cloud, Upload, Download, LogOut,
   LogIn, Tag, ChevronRight, CheckCircle2

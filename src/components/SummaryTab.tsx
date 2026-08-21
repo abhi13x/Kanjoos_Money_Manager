@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Grid, Card, CardContent, Typography, List, ListItem, ListItemText, Chip, Divider } from '@mui/material';
+import { Box, Grid, Card, CardContent, Typography, List, ListItem, ListItemText, Chip } from '@mui/material';
+import Divider from '@mui/divider';
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, Calendar, CreditCard as CardIcon, LineChart } from 'lucide-react';
 import type { Account, Transaction } from '@/db/schema';
 import { getInvestmentSummaries, getTotalProjectedInterest, getTotalProjectedMaturity } from '@/services/investmentService';
