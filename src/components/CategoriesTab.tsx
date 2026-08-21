@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   Box, Card, CardContent, Typography, Grid, TextField,
-  Button, MenuItem, List, ListItem, ListItemText, IconButton, Divider,
+  Button, MenuItem, List, ListItem, ListItemText, IconButton,
 } from '@mui/material';
+import Divider from '@mui/divider';
 import { Plus, Trash2, ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { db, type Category } from '@/db/schema';
 
