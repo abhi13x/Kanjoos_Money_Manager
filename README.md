@@ -61,37 +61,9 @@ The application follows a service-oriented architecture to separate UI from data
     - Components trigger actions via `financeService` and display data via hooks.
     - `TransactionModal` $\rightarrow$ `financeService.addTransaction()` $\rightarrow$ `db.transactions` & `db.accounts`.
 
-## 🛠️ Technical Implementation Details (for AI Agents)
+## 🛠️ Technical Implementation Details
 
-### 1. Monetary Precision
-To avoid IEEE 754 floating-point errors, the app uses a **"Cents/Paise Pattern"**:
-- **Storage**: All amounts in the database (`db.accounts`, `db.transactions`) are stored as `number` (integers).
-- **Conversion**: `src/types/finance.ts` provides `toCents()` and `fromCents()` utilities.
-- **Formatting**: `formatCurrency()` uses `Intl.NumberFormat` to convert stored integers back to localized currency strings for the UI.
-
-### 2. Database Architecture (Dexie.js)
-The app uses an IndexedDB wrapper. The schema is defined in `src/db/schema.ts`:
-- **Accounts**: Tracks `initialBalance` and `currentBalance`.
-- **Transactions**: Linked to accounts via `accountId`. Transfers use both `accountId` (source) and `toAccountId` (target).
-- **Categories**: Supports hierarchical structures via `parentId`.
-- **Seeding**: `seedDefaultCategories()` ensures the app starts with a standard set of categories.
-
-### 3. Atomic Balance Updates
-Balance updates are not handled in the UI but in `src/services/financeService.ts` using `db.transaction('rw', ...)`:
-- **Income**: Increases `currentBalance` of the associated account.
-- **Expense**: Decreases `currentBalance` of the associated account.
-- **Transfer**: Decreases source account and increases target account atomically.
-- **Deletion**: Reverts the balance change associated with the transaction before deleting the record.
-
-### 4. Reactive UI State
-The app leverages `dexie-react-hooks` for real-time UI updates:
-- `useLiveQuery` is used in `Dashboard.tsx` and `useUserSummary.ts` to automatically re-render components when the underlying IndexedDB data changes.
-
-### 5. Google Drive Sync Logic
-The sync process is entirely client-side:
-- **Scope**: Uses `https://www.googleapis.com/auth/drive.appdata` to store data in a hidden folder accessible only by the app.
-- **Export**: Serializes all Dexie tables into a single JSON blob and uploads it as `backup.json`.
-- **Import**: Downloads `backup.json` and performs a bulk re-population of the local Dexie database.
+For a deep dive into the technical architecture, code flow, and logic, please refer to the [SKILL.md](./SKILL.md) file.
 
 ## 🛠️ Tech Stack
 
@@ -107,7 +79,7 @@ The sync process is entirely client-side:
 1. Clone the repository.
 2. Install dependencies:
    ```bash
-   npm install
+   bun install
    ```
 3. Set up your Google Client ID in a `.env` file:
    ```env
@@ -115,5 +87,5 @@ The sync process is entirely client-side:
    ```
 4. Start the development server:
    ```bash
-   npm run dev
+   bun run dev
    ```

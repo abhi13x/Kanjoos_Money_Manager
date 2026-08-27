@@ -38,27 +38,34 @@ export interface Account {
   investmentSubType?: InvestmentSubType;
   /** Compounding frequency for FD (default: quarterly) */
   compoundingFrequency?: CompoundingFrequency;
+  color?: string;
+  icon?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
-  type: 'income' | 'expense';
-  parentId?: string; // If set, this is a sub-category
+  type: 'expense' | 'income';
+  parentId?: string | null;          // Allow undefined or null for root categories
+  parentCategoryId?: string | null;  // Secondary fallback schema key
+  color?: string;
+  icon?: string;
 }
 
 export interface Transaction {
   id: string;
-  amount: number; // stored in cents
-  type: 'income' | 'expense' | 'transfer';
-  accountId: string;
-  toAccountId?: string; // only for transfers
-  categoryId?: string; // references category
-  date: number; // timestamp
+  amount: number;
+  date: number;                      // Unix timestamp in ms
+  type: 'expense' | 'income' | 'transfer';
+  categoryId?: string;
+  subCategoryId?: string | null;
+  accountId?: string;
+  toAccountId?: string;
   note?: string;
   description?: string;
   isRecurring?: boolean;
-  repeatInterval?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeatInterval?: string;
+  updatedAt?: number;
 }
 
 class KanjoosDatabase extends Dexie {
@@ -102,6 +109,7 @@ class KanjoosDatabase extends Dexie {
       // Lifestyle & Discretionary Expenses
       { id: 'cat-shopping', name: 'Shopping', type: 'expense' },
       { id: 'cat-entertainment', name: 'Entertainment & OTT', type: 'expense' },
+      { id: 'cat-netflix', name: 'Netflix', type: 'expense', parentId: 'cat-entertainment', color: '#E50914', icon: 'tv' },
       { id: 'cat-medical', name: 'Medical & Healthcare', type: 'expense' },
       { id: 'cat-expense-other', name: 'Miscellaneous', type: 'expense' }
     ];

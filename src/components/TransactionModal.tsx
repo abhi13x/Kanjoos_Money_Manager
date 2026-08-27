@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
+import { addTransactionWithSync, updateTransactionWithSync } from '@/services/financeService';
 import { 
   Dialog, DialogTitle, DialogContent, Box, IconButton, TextField, 
-  MenuItem, Button, ToggleButton, ToggleButtonGroup, 
+  MenuItem, Button,
+  List, ListItemButton, ListItemIcon, ListItemText,
   InputAdornment, Typography, FormControlLabel, Checkbox 
 } from '@mui/material';
-import { X, Calendar, Tag, CreditCard, ArrowRightLeft, FileText } from 'lucide-react';
+import { X, Calendar, Tag, CreditCard, ArrowRightLeft, FileText, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface TransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editTransaction?: any;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, editTransaction }) => {
   const [type, setType] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState('');
@@ -25,11 +28,37 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatInterval, setRepeatInterval] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
 
+  useEffect(() => {
+    if (isOpen && editTransaction) {
+      setType(editTransaction.type);
+      setAmount((editTransaction.amount / 100).toFixed(2));
+      setAccountId(editTransaction.accountId);
+      setToAccountId(editTransaction.toAccountId || '');
+      setCategoryId(editTransaction.categoryId || '');
+      setDate(new Date(editTransaction.date).toISOString().split('T')[0]);
+      setNote(editTransaction.note || '');
+      setDescription(editTransaction.description || '');
+      setIsRecurring(editTransaction.isRecurring || false);
+      setRepeatInterval(editTransaction.repeatInterval || 'none');
+    } else if (isOpen) {
+      setType('expense');
+      setAmount('');
+      setAccountId('');
+      setToAccountId('');
+      setCategoryId('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setNote('');
+      setDescription('');
+      setIsRecurring(false);
+      setRepeatInterval('monthly');
+    }
+  }, [isOpen, editTransaction]);
+
   const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
 
   const handleTypeChange = (
-    _event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement> | null,
     newType: 'expense' | 'income' | 'transfer' | null
   ) => {
     if (newType !== null) {
@@ -45,10 +74,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
     const amountCents = Math.round(parseFloat(amount) * 100);
 
     try {
-      await db.transaction('rw', [db.transactions, db.accounts], async () => {
-        // Create transactional logging profile
-        await db.transactions.add({
-          id: crypto.randomUUID(),
+      if (editTransaction) {
+        await updateTransactionWithSync(editTransaction.id, {
           amount: amountCents,
           type,
           accountId,
@@ -60,25 +87,20 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
           isRecurring,
           repeatInterval: isRecurring ? repeatInterval : 'none',
         });
-
-        // Live Balance calculations
-        const srcAccount = await db.accounts.get(accountId);
-        if (srcAccount) {
-          const multiplier = type === 'income' ? 1 : -1;
-          await db.accounts.update(accountId, {
-            currentBalance: srcAccount.currentBalance + (amountCents * multiplier),
-          });
-        }
-
-        if (type === 'transfer' && toAccountId) {
-          const targetAccount = await db.accounts.get(toAccountId);
-          if (targetAccount) {
-            await db.accounts.update(toAccountId, {
-              currentBalance: targetAccount.currentBalance + amountCents,
-            });
-          }
-        }
-      });
+      } else {
+        await addTransactionWithSync({
+          amount: amountCents,
+          type,
+          accountId,
+          toAccountId: type === 'transfer' ? toAccountId : undefined,
+          categoryId: type === 'transfer' ? undefined : categoryId,
+          date: new Date(date).getTime(),
+          note,
+          description,
+          isRecurring,
+          repeatInterval: isRecurring ? repeatInterval : 'none',
+        });
+      }
 
       // Reset local state fields
       setAmount('');
@@ -109,7 +131,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
     >
       <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography component="span" variant="h6" sx={{ fontWeight: 800 }}>
-          Add Entry
+          {editTransaction ? 'Edit Entry' : 'Add Entry'}
         </Typography>
         <IconButton onClick={onClose} size="small" sx={{ color: 'text.secondary' }}>
           <X size={20} />
@@ -119,24 +141,52 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
       <DialogContent sx={{ borderTop: 'none', px: 3, py: 2 }}>
         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           
-          <ToggleButtonGroup
-            value={type}
-            exclusive
-            onChange={handleTypeChange}
-            fullWidth
-            size="small"
-            sx={{
-              bgcolor: 'action.hover', p: 0.5, borderRadius: '12px', border: 'none',
-              '& .MuiToggleButtonGroup-grouped': {
-                border: 0, borderRadius: '8px !important', textTransform: 'capitalize', fontWeight: 700,
-                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: 1, color: 'primary.main' }
-              }
-            }}
-          >
-            <ToggleButton value="expense">Expense</ToggleButton>
-            <ToggleButton value="income">Income</ToggleButton>
-            <ToggleButton value="transfer">Transfer</ToggleButton>
-          </ToggleButtonGroup>
+          <List sx={{ bgcolor: 'action.hover', p: 1, borderRadius: '12px' }} component="div">
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'expense')}
+              selected={type === 'expense'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'expense' ? 'background.paper' : 'transparent',
+                color: type === 'expense' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <TrendingDown size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Expense" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+            
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'income')}
+              selected={type === 'income'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'income' ? 'background.paper' : 'transparent',
+                color: type === 'income' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <TrendingUp size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Income" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+            
+            <ListItemButton
+              onClick={() => handleTypeChange(null, 'transfer')}
+              selected={type === 'transfer'}
+              sx={{ 
+                borderRadius: '8px', 
+                bgcolor: type === 'transfer' ? 'background.paper' : 'transparent',
+                color: type === 'transfer' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <ArrowRightLeft size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Transfer" sx={{ fontWeight: 600 }} />
+            </ListItemButton>
+          </List>
 
           <TextField
             label="Amount"
@@ -157,7 +207,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
             }}
           />
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField
               select
               label={type === 'transfer' ? 'From Account' : 'Account'}
@@ -168,8 +218,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
               slotProps={{
                 input: {
                   startAdornment: (<InputAdornment position="start"><CreditCard size={18} /></InputAdornment>),
-                  sx: { borderRadius: '12px' }
-                }
+                  sx: { borderRadius: '12px' }                },
+                select: {
+                  MenuProps: {
+                    sx: {
+                      width: '100%',
+                      '& .MuiMenuItem': {
+                        px: { xs: 2, sm: 3 },
+                        textAlign: 'center'
+                      }
+                    }
+                  }                }
               }}
             >
               {accounts.map((acc) => (
@@ -188,8 +247,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
                 slotProps={{
                   input: {
                     startAdornment: (<InputAdornment position="start"><ArrowRightLeft size={18} /></InputAdornment>),
-                    sx: { borderRadius: '12px' }
-                  }
+                    sx: { borderRadius: '12px' }                  },
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }                  }
                 }}
               >
                 {accounts.filter((acc) => acc.id !== accountId).map((acc) => (
@@ -207,8 +275,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
                 slotProps={{
                   input: {
                     startAdornment: (<InputAdornment position="start"><Tag size={18} /></InputAdornment>),
-                    sx: { borderRadius: '12px' }
-                  }
+                    sx: { borderRadius: '12px' }                  },
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }                  }
                 }}
               >
                 {categories.filter((c) => c.type === type).map((cat) => (
@@ -276,6 +353,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
                 onChange={(e) => setRepeatInterval(e.target.value as any)}
                 fullWidth
                 sx={{ mt: 1.5 }}
+                slotProps={{
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }
+                  }
+                }}
               >
                 <MenuItem value="daily">Daily</MenuItem>
                 <MenuItem value="weekly">Weekly</MenuItem>
@@ -285,7 +375,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) 
             )}
           </Box>
 
-          <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: 1.8, borderRadius: '16px', fontWeight: 'bold' }}>
+          <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: { xs: 1.5, sm: 1.8 }, borderRadius: '16px', fontWeight: 'bold' }}>
             Save Transaction
           </Button>
         </Box>

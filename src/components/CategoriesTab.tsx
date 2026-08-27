@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
   Box, Card, CardContent, Typography, Grid, TextField,
-  Button, MenuItem, List, ListItem, ListItemText, IconButton, Divider,
+  Button, MenuItem, List, ListItem, ListItemText, IconButton,
+  Divider,
 } from '@mui/material';
 import { Plus, Trash2, ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { db, type Category } from '@/db/schema';
@@ -70,7 +71,19 @@ const CategorySection: React.FC<{
             onChange={(e) => setParentId(e.target.value)}
             size="small"
             fullWidth
-          >
+            slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
             <MenuItem value=""><em>None (Root)</em></MenuItem>
             {allCategories
               .filter((c) => c.type === type && !c.parentId)

@@ -6,10 +6,10 @@ import {
 } from '@mui/material';
 import { 
   Trash2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, 
-  Repeat, FilterX, Calendar, ReceiptText 
+  Repeat, FilterX, Calendar, ReceiptText, Edit2 
 } from 'lucide-react';
 import type { Transaction, Account, Category } from '@/db/schema';
-import { db } from '@/db/schema';
+import { deleteTransactionWithSync } from '@/services/financeService';
 
 interface TransactionsTabProps {
   transactions: Transaction[];
@@ -29,18 +29,25 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   const [endDate, setEndDate] = useState<string>('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // 1. Filtered Transactions
+  // 1. Filtered and Sorted Transactions (Latest First)
   const filteredTx = useMemo(() => {
-    return transactions.filter((tx) => {
-      if (startDate && tx.date < new Date(startDate).getTime()) return false;
-      if (endDate && tx.date > new Date(endDate).getTime() + 86400000) return false;
-      return true;
-    });
+    return transactions
+      .filter((tx) => {
+        if (startDate && tx.date < new Date(startDate).getTime()) return false;
+        if (endDate && tx.date > new Date(endDate).getTime() + 86400000) return false;
+        return true;
+      })
+      .sort((a, b) => b.date - a.date); // Sort descending by timestamp
   }, [transactions, startDate, endDate]);
 
   // 2. Grouped Engine with Group Totals
   const groupedData = useMemo(() => {
-    const groups: Record<string, { items: Transaction[]; netCents: number }> = {};
+    const groups: Record<string, { 
+      items: Transaction[]; 
+      netCents: number; 
+      totalIncome: number; 
+      totalExpense: number; 
+    }> = {};
 
     filteredTx.forEach((tx) => {
       const dateObj = new Date(tx.date);
@@ -60,14 +67,17 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
       }
 
       if (!groups[key]) {
-        groups[key] = { items: [], netCents: 0 };
+        groups[key] = { items: [], netCents: 0, totalIncome: 0, totalExpense: 0 };
       }
 
       groups[key].items.push(tx);
 
-      // Compute group net impact
+      // Compute group net impact and absolute totals
       const multiplier = tx.type === 'income' ? 1 : tx.type === 'expense' ? -1 : 0;
       groups[key].netCents += tx.amount * multiplier;
+      
+      if (tx.type === 'income') groups[key].totalIncome += tx.amount;
+      if (tx.type === 'expense') groups[key].totalExpense += tx.amount;
     });
 
     return groups;
@@ -75,7 +85,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
 
   const handleDelete = async () => {
     if (deleteId) {
-      await db.transactions.delete(deleteId);
+      try {
+        await deleteTransactionWithSync(deleteId);
+      } catch (err) {
+        console.error('Failed to delete transaction:', err);
+        alert('Error deleting transaction. Please try again.');
+      }
       setDeleteId(null);
     }
   };
@@ -123,6 +138,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           onChange={(_e, newMode) => newMode && setViewMode(newMode)}
           size="small"
           sx={{
+            height: { xs: 40, sm: 44 },
             bgcolor: 'action.hover',
             p: 0.5,
             borderRadius: '12px',
@@ -132,7 +148,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
               borderRadius: '8px !important',
               textTransform: 'capitalize',
               fontWeight: 700,
-              px: 2,
+              px: { xs: 1, sm: 2 },
               '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: 1, color: 'primary.main' }
             }
           }}
@@ -147,7 +163,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           <TextField
             type="date"
             label="From"
-            size="small"
+            size="medium"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             slotProps={{
@@ -157,11 +173,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 sx: dateInputSx
               }
             }}
+            sx={{ flexGrow: 1, flexBasis: 0, maxWidth: { xs: 'none', sm: '160px' } }}
           />
           <TextField
             type="date"
             label="To"
-            size="small"
+            size="medium"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             slotProps={{
@@ -171,6 +188,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 sx: dateInputSx
               }
             }}
+            sx={{ flexGrow: 1, flexBasis: 0, maxWidth: { xs: 'none', sm: '160px' } }}
           />
           {(startDate || endDate) && (
             <Tooltip title="Reset date filters">
@@ -179,7 +197,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 size="small"
                 onClick={() => { setStartDate(''); setEndDate(''); }}
                 startIcon={<FilterX size={16} />}
-                sx={{ fontWeight: 700, borderRadius: '10px' }}
+                sx={{ flexGrow: 0, flexShrink: 0, fontWeight: 700, borderRadius: '10px', height: 44, minWidth: 44 }}
               >
                 Clear
               </Button>
@@ -210,49 +228,85 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           </Typography>
         </Card>
       ) : (
-        Object.entries(groupedData).map(([groupTitle, { items, netCents }]) => (
+        Object.entries(groupedData).map(([groupTitle, { items, netCents, totalIncome, totalExpense }]) => (
           <Box key={groupTitle}>
-            {/* Group Title Header + Net Pill */}
+            {/* Group Title Header + Totals */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, px: 1, mt: 1 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary', letterSpacing: '0.2px' }}>
                 {groupTitle}
               </Typography>
-              {netCents !== 0 && (
-                <Chip 
-                  label={`Net: ${netCents > 0 ? '+' : ''}${format(netCents)}`}
-                  size="small"
-                  sx={{ 
-                    fontWeight: 800, 
-                    fontSize: '0.72rem',
-                    bgcolor: netCents > 0 ? 'success.50' : 'error.50',
-                    color: netCents > 0 ? 'success.main' : 'error.main',
-                    border: '1px solid',
-                    borderColor: netCents > 0 ? 'success.200' : 'error.200'
-                  }}
-                />
-              )}
+              
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {viewMode !== 'daily' && (
+                  <Chip 
+                    label={`Income: ${format(totalIncome)}`}
+                    size="small"
+                    sx={{ 
+                      fontWeight: 800, 
+                      fontSize: '0.72rem',
+                      bgcolor: 'success.50',
+                      color: 'success.main',
+                      border: '1px solid',
+                      borderColor: 'success.200'
+                    }}
+                  />
+                )}
+                {viewMode !== 'daily' && (
+                  <Chip 
+                    label={`Expense: ${format(totalExpense)}`}
+                    size="small"
+                    sx={{ 
+                      fontWeight: 800, 
+                      fontSize: '0.72rem',
+                      bgcolor: 'error.50',
+                      color: 'error.main',
+                      border: '1px solid',
+                      borderColor: 'error.200'
+                    }}
+                  />
+                )}
+                {netCents !== 0 && (
+                  <Chip 
+                    label={`Net: ${netCents > 0 ? '+' : ''}${format(netCents)}`}
+                    size="small"
+                    sx={{ 
+                      fontWeight: 800, 
+                      fontSize: '0.72rem',
+                      bgcolor: netCents > 0 ? 'success.50' : 'error.50',
+                      color: netCents > 0 ? 'success.main' : 'error.main',
+                      border: '1px solid',
+                      borderColor: netCents > 0 ? 'success.200' : 'error.200'
+                    }}
+                  />
+                )}
+              </Box>
             </Box>
 
-            {/* Transactions Card Group */}
-            <Card sx={{ border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '20px', overflow: 'hidden' }}>
-              {items.map((tx, idx) => (
-                <Box 
-                  key={tx.id} 
-                  sx={{ 
-                    borderBottom: idx !== items.length - 1 ? '1px solid' : 'none', 
-                    borderColor: 'divider' 
-                  }}
-                >
-                  <TransactionRow 
-                    tx={tx} 
-                    accounts={accounts} 
-                    getCategoryName={getCategoryName} 
-                    format={format} 
-                    onDelete={() => setDeleteId(tx.id)} 
-                  />
-                </Box>
-              ))}
-            </Card>
+            {/* Only show transactions list if viewMode is daily */}
+            {viewMode === 'daily' && (
+              <Card sx={{ border: '1px solid', borderColor: 'divider', boxShadow: 'none', borderRadius: '20px', overflow: 'hidden' }}>
+                {items.map((tx, idx) => (
+                  <Box 
+                    key={tx.id} 
+                    sx={{ 
+                      borderBottom: idx !== items.length - 1 ? '1px solid' : 'none', 
+                      borderColor: 'divider' 
+                    }}
+                  >
+                    <TransactionRow 
+                      tx={tx} 
+                      accounts={accounts} 
+                      getCategoryName={getCategoryName} 
+                      format={format} 
+                      onDelete={() => setDeleteId(tx.id)} 
+                      onEdit={() => {
+                        window.dispatchEvent(new CustomEvent('open-edit-modal', { detail: tx }));
+                      }} 
+                    />
+                  </Box>
+                ))}
+              </Card>
+            )}
           </Box>
         ))
       )}
@@ -293,7 +347,8 @@ const TransactionRow: React.FC<{
   getCategoryName: (tx: Transaction) => string;
   format: (v: number) => string;
   onDelete: () => void;
-}> = ({ tx, accounts, getCategoryName, format, onDelete }) => {
+  onEdit: () => void;
+}> = ({ tx, accounts, getCategoryName, format, onDelete, onEdit }) => {
   const account = accounts.find((a) => a.id === tx.accountId);
   const toAccount = tx.toAccountId ? accounts.find((a) => a.id === tx.toAccountId) : null;
 
@@ -302,19 +357,19 @@ const TransactionRow: React.FC<{
     income: {
       color: 'success.main',
       bg: 'success.50',
-      icon: <ArrowDownLeft size={20} className="text-emerald-600" />,
+      icon: <ArrowDownLeft size={20} style={{ color: 'var(--mui-palette-success-main)' }} />,
       sign: '+'
     },
     expense: {
       color: 'text.primary',
       bg: 'action.hover',
-      icon: <ArrowUpRight size={20} className="text-rose-500" />,
+      icon: <ArrowUpRight size={20} style={{ color: 'var(--mui-palette-error-main)' }} />,
       sign: '-'
     },
     transfer: {
       color: 'info.main',
       bg: 'info.50',
-      icon: <ArrowRightLeft size={18} className="text-blue-500" />,
+      icon: <ArrowRightLeft size={18} style={{ color: 'var(--mui-palette-info-main)' }} />,
       sign: ''
     }
   }[tx.type];
@@ -346,15 +401,23 @@ const TransactionRow: React.FC<{
         </Avatar>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
-          <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            {getCategoryName(tx)}
-          </Typography>
-          
+          {tx.note && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="body1" sx={{ fontWeight: 800, lineHeight: 1.2, color: 'text.primary' }}>
+                {tx.note}
+              </Typography>
+            </Box>
+          )}
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
               {tx.type === 'transfer' && account && toAccount 
                 ? `${account.name} ➔ ${toAccount.name}` 
                 : account?.name || 'Unknown Account'}
+              <Box component="span" sx={{ color: 'text.disabled', mx: 0.5 }}>|</Box>
+              <Typography component="span" variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                {getCategoryName(tx)}
+              </Typography>
             </Typography>
 
             {tx.isRecurring && (
@@ -365,12 +428,6 @@ const TransactionRow: React.FC<{
                 variant="outlined" 
                 sx={{ height: 20, fontSize: '0.65rem', fontWeight: 800, textTransform: 'capitalize' }} 
               />
-            )}
-
-            {tx.note && (
-              <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                • {tx.note}
-              </Typography>
             )}
           </Box>
 
@@ -397,13 +454,21 @@ const TransactionRow: React.FC<{
 
         <IconButton 
           size="small" 
+          onClick={onEdit}
+          sx={{ width: 44, height: 44, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+        >
+          <Edit2 size={20} />
+        </IconButton>
+        <IconButton 
+          size="small" 
           onClick={onDelete}
           sx={{ 
+            width: 44, height: 44,
             color: 'text.disabled',
             '&:hover': { color: 'error.main', bgcolor: 'error.50' }
           }}
         >
-          <Trash2 size={16} />
+          <Trash2 size={20} />
         </IconButton>
       </Box>
     </Box>

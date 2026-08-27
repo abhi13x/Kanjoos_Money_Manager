@@ -282,7 +282,19 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <TextField label="Account Name" value={name} onChange={(e) => setName(e.target.value)} required fullWidth />
 
-            <TextField select label="Account Type" value={type} onChange={(e) => handleTypeChange(e.target.value as AccountType)} required fullWidth>
+            <TextField select label="Account Type" value={type} onChange={(e) => handleTypeChange(e.target.value as AccountType)} required fullWidth slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
               <MenuItem value="cash">Cash</MenuItem>
               <MenuItem value="savings">Savings Account</MenuItem>
               <MenuItem value="wallet">Wallet</MenuItem>
@@ -295,7 +307,19 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
             </TextField>
 
             {subTypeOptions.length > 1 && (
-              <TextField select label="Investment Type" value={investmentSubType} onChange={(e) => setInvestmentSubType(e.target.value as InvestmentSubType)} required fullWidth>
+              <TextField select label="Investment Type" value={investmentSubType} onChange={(e) => setInvestmentSubType(e.target.value as InvestmentSubType)} required fullWidth slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                 {subTypeOptions.map((opt) => (
                   <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                 ))}
@@ -325,7 +349,19 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
             )}
 
             {type === 'fd_rd' && investmentSubType === 'fd' && (
-              <TextField select label="Compounding" value={compoundingFrequency} onChange={(e) => setCompoundingFrequency(e.target.value as CompoundingFrequency)} fullWidth>
+              <TextField select label="Compounding" value={compoundingFrequency} onChange={(e) => setCompoundingFrequency(e.target.value as CompoundingFrequency)} fullWidth slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                 <MenuItem value="monthly">Monthly</MenuItem>
                 <MenuItem value="quarterly">Quarterly (Indian banks)</MenuItem>
                 <MenuItem value="annually">Annually</MenuItem>
