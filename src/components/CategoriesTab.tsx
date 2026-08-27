@@ -71,7 +71,19 @@ const CategorySection: React.FC<{
             onChange={(e) => setParentId(e.target.value)}
             size="small"
             fullWidth
-          >
+            slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
             <MenuItem value=""><em>None (Root)</em></MenuItem>
             {allCategories
               .filter((c) => c.type === type && !c.parentId)

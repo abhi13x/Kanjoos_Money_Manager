@@ -104,6 +104,15 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
               label="Month"
               onChange={(e) => setBreakdownMonth(Number(e.target.value))}
               sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+              MenuProps={{
+    sx: {
+      width: '100%',
+      '& .MuiMenuItem': {
+        px: { xs: 2, sm: 3 },
+        textAlign: 'center'
+      }
+    }
+  }}
             >
               {MONTHS.map((monthName, idx) => (
                 <MenuItem key={monthName} value={idx}>
@@ -121,6 +130,15 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
               label="Year"
               onChange={(e) => setBreakdownYear(Number(e.target.value))}
               sx={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem' }}
+              MenuProps={{
+    sx: {
+      width: '100%',
+      '& .MuiMenuItem': {
+        px: { xs: 2, sm: 3 },
+        textAlign: 'center'
+      }
+    }
+  }}
             >
               {availableYears.map((year) => (
                 <MenuItem key={year} value={year}>

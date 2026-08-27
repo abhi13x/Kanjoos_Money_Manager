@@ -207,7 +207,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
             }}
           />
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField
               select
               label={type === 'transfer' ? 'From Account' : 'Account'}
@@ -218,8 +218,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
               slotProps={{
                 input: {
                   startAdornment: (<InputAdornment position="start"><CreditCard size={18} /></InputAdornment>),
-                  sx: { borderRadius: '12px' }
-                }
+                  sx: { borderRadius: '12px' }                },
+                select: {
+                  MenuProps: {
+                    sx: {
+                      width: '100%',
+                      '& .MuiMenuItem': {
+                        px: { xs: 2, sm: 3 },
+                        textAlign: 'center'
+                      }
+                    }
+                  }                }
               }}
             >
               {accounts.map((acc) => (
@@ -238,8 +247,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
                 slotProps={{
                   input: {
                     startAdornment: (<InputAdornment position="start"><ArrowRightLeft size={18} /></InputAdornment>),
-                    sx: { borderRadius: '12px' }
-                  }
+                    sx: { borderRadius: '12px' }                  },
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }                  }
                 }}
               >
                 {accounts.filter((acc) => acc.id !== accountId).map((acc) => (
@@ -257,8 +275,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
                 slotProps={{
                   input: {
                     startAdornment: (<InputAdornment position="start"><Tag size={18} /></InputAdornment>),
-                    sx: { borderRadius: '12px' }
-                  }
+                    sx: { borderRadius: '12px' }                  },
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }                  }
                 }}
               >
                 {categories.filter((c) => c.type === type).map((cat) => (
@@ -326,6 +353,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
                 onChange={(e) => setRepeatInterval(e.target.value as any)}
                 fullWidth
                 sx={{ mt: 1.5 }}
+                slotProps={{
+                  select: {
+                    MenuProps: {
+                      sx: {
+                        width: '100%',
+                        '& .MuiMenuItem': {
+                          px: { xs: 2, sm: 3 },
+                          textAlign: 'center'
+                        }
+                      }
+                    }
+                  }
+                }}
               >
                 <MenuItem value="daily">Daily</MenuItem>
                 <MenuItem value="weekly">Weekly</MenuItem>
@@ -335,7 +375,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, ed
             )}
           </Box>
 
-          <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: 1.8, borderRadius: '16px', fontWeight: 'bold' }}>
+          <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: { xs: 1.5, sm: 1.8 }, borderRadius: '16px', fontWeight: 'bold' }}>
             Save Transaction
           </Button>
         </Box>
