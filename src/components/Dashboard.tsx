@@ -18,7 +18,7 @@ import {
   Box, Typography, 
   CircularProgress, Container, Paper, 
   BottomNavigation, BottomNavigationAction, Fab,
-  AppBar, Toolbar, ToggleButton, ToggleButtonGroup
+  AppBar, Toolbar
 } from '@mui/material';
 import { 
   Plus, LayoutDashboard, ArrowRightLeft, BarChart3, Wallet, Settings
@@ -80,7 +80,7 @@ export const Dashboard: React.FC = () => {
         color: 'text.primary',
         transition: 'background-color 0.2s, color 0.2s',
         // Dynamic padding based on device to prevent overlap with navigation
-        pb: isMobile ? '84px' : isTablet ? '64px' : '24px'
+        pb: '88px'
       }}
     >
       
@@ -98,57 +98,13 @@ export const Dashboard: React.FC = () => {
                 </Typography>
               </Box>
               
-              {/* Desktop/Tablet Navigation */}
-              <ToggleButtonGroup
-      exclusive
-      value={currentTab}
-      onChange={(_, newValue) => {
-        setCurrentTab(newValue);
-        if (newValue === 4) {
-          setSettingsView('main');
-        }
-      }}
-      sx={{ display: 'flex', alignItems: 'center', gap: 3 }}
-    >
-      <ToggleButton
-        value={0}
-        sx={{ px: 2, py: 1, borderRadius: '12px' }}
-      >
-        Summary
-      </ToggleButton>
-      <ToggleButton
-        value={1}
-        sx={{ px: 2, py: 1, borderRadius: '12px' }}
-      >
-        Transactions
-      </ToggleButton>
-      <ToggleButton
-        value={2}
-        sx={{ px: 2, py: 1, borderRadius: '12px' }}
-      >
-        Stats
-      </ToggleButton>
-      <ToggleButton
-        value={3}
-        sx={{ px: 2, py: 1, borderRadius: '12px' }}
-      >
-        Accounts
-      </ToggleButton>
-      <ToggleButton
-        value={4}
-        sx={{ px: 2, py: 1, borderRadius: '12px' }}
-      >
-        Settings
-      </ToggleButton>
-    </ToggleButtonGroup>
             </Box>
           </Toolbar>
         </AppBar>
       )}
 
       {/* Mobile Header - Integrated in main content */}
-      {isMobile && (
-        <Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', py: 2 }}>
+<Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', py: 2 }}>
           <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-0.05em', color: 'primary.main' }}>
@@ -158,13 +114,11 @@ export const Dashboard: React.FC = () => {
                 Welcome back, {username}
               </Typography>
             </Box>
-
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               {/* Mobile menu button could go here if needed */}
             </Box>
           </Container>
         </Box>
-      )}
 
       {/* Main Container Content */}
       <Container maxWidth="lg" sx={{ py: isMobile ? 4 : 6 }}>
@@ -187,9 +141,36 @@ export const Dashboard: React.FC = () => {
           </>
         )}
       </Container>
+      
+      {/* Bottom Navigation - fixed at bottom for all devices */}
+      <Paper 
+        elevation={4} 
+        sx={{ 
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
+          borderTop: '1px solid', borderColor: 'divider', borderRadius: 0
+        }}
+      >
+        <BottomNavigation
+          showLabels
+          value={currentTab}
+          onChange={(_e, val) => {
+            setCurrentTab(val);
+            if (val === 4) {
+              setSettingsView('main');
+            }
+          }}
+          sx={{ height: '64px', bgcolor: 'background.paper' }}
+        >
+          <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} />} />
+          <BottomNavigationAction label="Transactions" icon={<ArrowRightLeft size={20} />} />
+          <BottomNavigationAction label="Stats" icon={<BarChart3 size={20} />} />
+          <BottomNavigationAction label="Accounts" icon={<Wallet size={20} />} />
+          <BottomNavigationAction label="Settings" icon={<Settings size={20} />} />
+        </BottomNavigation>
+      </Paper>
 
-      {/* FAB - Floating action button - only on mobile for tabs that need it */}
-      {isMobile && (currentTab === 0 || currentTab === 1) && (
+      {/* FAB - Floating action button - for tabs that need it (Summary and Transactions) */}
+      {(currentTab === 0 || currentTab === 1) && (
         <Fab
           color="primary"
           aria-label="add"
@@ -197,7 +178,7 @@ export const Dashboard: React.FC = () => {
           sx={{
             position: 'fixed',
             right: 24,
-            bottom: 20,
+            bottom: 84,
             boxShadow: 4,
           }}
         >
@@ -208,49 +189,9 @@ export const Dashboard: React.FC = () => {
       {/* Global Transaction Modal Layover */}
       <TransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
 
-      {/* Responsive Navigation - Bottom for mobile, hidden for desktop/tablet (using AppBar above) */}
-      {isMobile && (
-        <Paper 
-          elevation={4} 
-          sx={{ 
-            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
-            borderTop: '1px solid', borderColor: 'divider', borderRadius: 0
-          }}
-        >
-          <BottomNavigation
-            showLabels
-            value={currentTab}
-            onChange={(_e, val) => {
-              setCurrentTab(val);
-              if (val !== 4) setSettingsView('main');
-            }}
-            sx={{ height: '64px', bgcolor: 'background.paper' }}
-          >
-            <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} />} />
-            <BottomNavigationAction label="Transactions" icon={<ArrowRightLeft size={20} />} />
-            <BottomNavigationAction label="Stats" icon={<BarChart3 size={20} />} />
-            <BottomNavigationAction label="Accounts" icon={<Wallet size={20} />} />
-            <BottomNavigationAction label="Settings" icon={<Settings size={20} />} />
-          </BottomNavigation>
-        </Paper>
-      )}
+
       
-      {/* Desktop/Tablet FAB - positioned differently */}
-      {!isMobile && (currentTab === 0 || currentTab === 1) && (
-        <Fab
-          color="primary"
-          aria-label="add"
-          onClick={() => setIsModalOpen(true)}
-          sx={{
-            position: 'fixed',
-            right: 24,
-            bottom: isTablet ? 80 : 24,
-            boxShadow: 4,
-          }}
-        >
-          <Plus size={24} />
-        </Fab>
-      )}
+
 
     </Box>
   );

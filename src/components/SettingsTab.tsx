@@ -208,7 +208,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                 value={defaultCurrency}
                 onChange={(e) => updateDefaultCurrency(e.target.value)}
                 fullWidth
-              >
+                slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                 <MenuItem value="INR">INR (₹)</MenuItem>
                 <MenuItem value="USD">USD ($)</MenuItem>
                 <MenuItem value="EUR">EUR (€)</MenuItem>
@@ -221,7 +233,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                 value={themeMode}
                 onChange={(e) => updateThemeMode(e.target.value as any)}
                 fullWidth
-              >
+                slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                 <MenuItem value="light">Light</MenuItem>
                 <MenuItem value="dark">Dark</MenuItem>
                 <MenuItem value="system">System</MenuItem>

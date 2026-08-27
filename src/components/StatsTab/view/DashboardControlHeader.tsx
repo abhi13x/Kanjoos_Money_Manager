@@ -48,11 +48,11 @@ export const DashboardControlHeader = ({
 
                 <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
                     <ToggleButtonGroup
-                        size="small"
+                        size="medium"
                         value={groupBy}
                         exclusive
                         onChange={(_, val) => val && onGroupByChange(val)}
-                        sx={{ height: 40 }}
+                        sx={{ height: 44 }}
                     >
                         <ToggleButton value="month" sx={{ px: 2, fontWeight: 800, fontSize: '0.75rem' }}>MONTH</ToggleButton>
                         <ToggleButton value="year" sx={{ px: 2, fontWeight: 800, fontSize: '0.75rem' }}>YEAR</ToggleButton>
@@ -60,7 +60,7 @@ export const DashboardControlHeader = ({
 
                     <TextField
                         select
-                        size="small"
+                        size="medium"
                         label="Time Horizon"
                         value={effectivePeriod}
                         onChange={(e) => {
@@ -69,7 +69,19 @@ export const DashboardControlHeader = ({
                             onEffectivePeriodChange(value);
                         }}
                         sx={{ minWidth: '150px' }}
-                    >
+                        slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                         <MenuItem value="all">All {groupBy === 'month' ? 'Months' : 'Years'}</MenuItem>
                         {availablePeriods.map((pKey) => {
                             let display = pKey;
@@ -87,24 +99,48 @@ export const DashboardControlHeader = ({
 
                     <TextField
                         select
-                        size="small"
+                        size="medium"
                         label="Type"
                         value={statType}
                         onChange={(e) => handleStatTypeChange(e.target.value as 'expense' | 'income')}
                         sx={{ minWidth: '120px' }}
-                    >
+                        slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                         <MenuItem value="expense">Expense</MenuItem>
                         <MenuItem value="income">Income</MenuItem>
                     </TextField>
 
                     <TextField
                         select
-                        size="small"
+                        size="medium"
                         label="Category"
                         value={selectedCategory}
                         onChange={(e) => setSelectedCategory(e.target.value)}
                         sx={{ minWidth: '220px' }}
-                    >
+                        slotProps={{
+  select: {
+    MenuProps: {
+      sx: {
+        width: '100%',
+        '& .MuiMenuItem': {
+          px: { xs: 2, sm: 3 },
+          textAlign: 'center'
+        }
+      }
+    }
+  }
+}}>
                         <MenuItem value="all">All Categories</MenuItem>
                         {sortedCategoryOptions.map((cat) => (
                             <MenuItem

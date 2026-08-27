@@ -138,6 +138,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           onChange={(_e, newMode) => newMode && setViewMode(newMode)}
           size="small"
           sx={{
+            height: { xs: 40, sm: 44 },
             bgcolor: 'action.hover',
             p: 0.5,
             borderRadius: '12px',
@@ -147,7 +148,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
               borderRadius: '8px !important',
               textTransform: 'capitalize',
               fontWeight: 700,
-              px: 2,
+              px: { xs: 1, sm: 2 },
               '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: 1, color: 'primary.main' }
             }
           }}
@@ -162,7 +163,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           <TextField
             type="date"
             label="From"
-            size="small"
+            size="medium"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             slotProps={{
@@ -172,12 +173,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 sx: dateInputSx
               }
             }}
-            sx={{ width: '160px' }}
+            sx={{ flexGrow: 1, flexBasis: 0, maxWidth: { xs: 'none', sm: '160px' } }}
           />
           <TextField
             type="date"
             label="To"
-            size="small"
+            size="medium"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             slotProps={{
@@ -187,7 +188,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 sx: dateInputSx
               }
             }}
-            sx={{ width: '160px' }}
+            sx={{ flexGrow: 1, flexBasis: 0, maxWidth: { xs: 'none', sm: '160px' } }}
           />
           {(startDate || endDate) && (
             <Tooltip title="Reset date filters">
@@ -196,7 +197,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                 size="small"
                 onClick={() => { setStartDate(''); setEndDate(''); }}
                 startIcon={<FilterX size={16} />}
-                sx={{ fontWeight: 700, borderRadius: '10px' }}
+                sx={{ flexGrow: 0, flexShrink: 0, fontWeight: 700, borderRadius: '10px', height: 44, minWidth: 44 }}
               >
                 Clear
               </Button>
@@ -454,19 +455,20 @@ const TransactionRow: React.FC<{
         <IconButton 
           size="small" 
           onClick={onEdit}
-          sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+          sx={{ width: 44, height: 44, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
         >
-          <Edit2 size={16} />
+          <Edit2 size={20} />
         </IconButton>
         <IconButton 
           size="small" 
           onClick={onDelete}
           sx={{ 
+            width: 44, height: 44,
             color: 'text.disabled',
             '&:hover': { color: 'error.main', bgcolor: 'error.50' }
           }}
         >
-          <Trash2 size={16} />
+          <Trash2 size={20} />
         </IconButton>
       </Box>
     </Box>
