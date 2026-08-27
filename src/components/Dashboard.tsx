@@ -84,8 +84,8 @@ export const Dashboard: React.FC = () => {
       }}
     >
       
-      {/* Responsive Header - AppBar for desktop/tablet, integrated for mobile */}
-      {!isMobile && (
+      {/* Responsive Header - AppBar for desktop only (not mobile or tablet) */}
+      {!isMobile && !isTablet && (
         <AppBar position="fixed" sx={{ top: 0, left: 0, right: 0, zIndex: 1100, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
           <Toolbar sx={{ px: 4 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -103,8 +103,9 @@ export const Dashboard: React.FC = () => {
         </AppBar>
       )}
 
-      {/* Mobile Header - Integrated in main content */}
-<Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', py: 2 }}>
+{/* Mobile Header - Integrated in main content for mobile and tablet */}
+      {(isMobile || isTablet) && (
+        <Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', py: 2 }}>
           <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-0.05em', color: 'primary.main' }}>
@@ -119,9 +120,8 @@ export const Dashboard: React.FC = () => {
             </Box>
           </Container>
         </Box>
-
-      {/* Main Container Content */}
-      <Container maxWidth="lg" sx={{ py: isMobile ? 4 : 6 }}>
+       )}
+      <Container maxWidth="lg" sx={{ py: (isMobile || isTablet) ? 4 : 6 }}>
         {currentTab === 0 && <SummaryTab accounts={accounts} transactions={transactions} format={formatAmount} />}
         {currentTab === 1 && <TransactionsTab transactions={transactions} accounts={accounts} categories={categories} format={formatAmount} />}
         {currentTab === 2 && <StatsTab transactions={transactions} categories={categories} format={formatAmount} />}
