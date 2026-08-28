@@ -59,21 +59,31 @@ export const useAvailableYears = (transactions: Transaction[]) => {
 };
 
 /**
- * Filters transactions specifically for the category breakdown section based on selected month/year.
+ * Filters transactions for category breakdown based on effectivePeriod ('all' | 'YYYY-MM' | 'YYYY') and groupBy.
  */
 export const useBreakdownFilteredTransactions = (
   transactions: Transaction[],
   statType: 'expense' | 'income',
-  breakdownMonth: number,
-  breakdownYear: number
+  effectivePeriod: string,
+  groupBy: 'month' | 'year'
 ) => {
   return useMemo(() => {
     return transactions.filter((tx) => {
       if (tx.type !== statType) return false;
-      const d = new Date(tx.date);
-      return d.getMonth() === breakdownMonth && d.getFullYear() === breakdownYear;
+      if (effectivePeriod === 'all') return true;
+
+      const dateObj = new Date(tx.date);
+      if (isNaN(dateObj.getTime())) return false;
+
+      if (groupBy === 'month') {
+        const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+        return key === effectivePeriod;
+      } else {
+        const key = `${dateObj.getFullYear()}`;
+        return key === effectivePeriod;
+      }
     });
-  }, [transactions, statType, breakdownMonth, breakdownYear]);
+  }, [transactions, statType, effectivePeriod, groupBy]);
 };
 
 /**

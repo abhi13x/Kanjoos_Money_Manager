@@ -1,7 +1,6 @@
-// src/db/schema.ts
 import Dexie, { type Table } from 'dexie';
 
-// Define Account Types
+// Define Account & Investment Types
 export type AccountType = 
   | 'cash' 
   | 'savings' 
@@ -20,23 +19,18 @@ export interface Account {
   id: string;
   name: string;
   type: AccountType;
-  initialBalance: number; // stored in cents
-  currentBalance: number; // stored in cents
+  initialBalance: number; // Stored in cents / smallest currency unit
+  currentBalance: number; // Stored in cents / smallest currency unit
   currency: string;
   repeatInvestmentDate?: number; // Day of the month (1-31)
   interestRate?: number; // e.g. 7.1 for PPF, FD, RD
   expectedReturnRate?: number; // e.g. 12 for MF/stock CAGR
   statementDate?: number; // Day of the month (1-31)
   dueDate?: number; // Day of the month (1-31)
-  /** Monthly SIP/RD/PPF/EPFO contribution in cents */
-  monthlyInvestment?: number;
-  /** Investment start date (timestamp) for elapsed projections */
-  startDate?: number;
-  /** Total investment horizon in months */
+  monthlyInvestment?: number; // In cents
+  startDate?: number; // Timestamp in ms
   tenureMonths?: number;
-  /** Override auto-detected formula type */
   investmentSubType?: InvestmentSubType;
-  /** Compounding frequency for FD (default: quarterly) */
   compoundingFrequency?: CompoundingFrequency;
   color?: string;
   icon?: string;
@@ -46,16 +40,16 @@ export interface Category {
   id: string;
   name: string;
   type: 'expense' | 'income';
-  parentId?: string | null;          // Allow undefined or null for root categories
-  parentCategoryId?: string | null;  // Secondary fallback schema key
+  parentId?: string | null;
+  parentCategoryId?: string | null; // Schema compatibility key
   color?: string;
   icon?: string;
 }
 
 export interface Transaction {
   id: string;
-  amount: number;
-  date: number;                      // Unix timestamp in ms
+  amount: number; // Stored in cents
+  date: number; // Unix timestamp in ms
   type: 'expense' | 'income' | 'transfer';
   categoryId?: string;
   subCategoryId?: string | null;
@@ -69,49 +63,48 @@ export interface Transaction {
 }
 
 class KanjoosDatabase extends Dexie {
-  accounts!: Table<Account>;
-  categories!: Table<Category>;
-  transactions!: Table<Transaction>;
+  accounts!: Table<Account, string>;
+  categories!: Table<Category, string>;
+  transactions!: Table<Transaction, string>;
 
   constructor() {
     super('KanjoosDatabase');
+
+    // Schema versioning & compound indexing for high-performance chart queries
     this.version(1).stores({
       accounts: 'id, name, type',
-      categories: 'id, name, type, parentId',
-      transactions: 'id, amount, type, accountId, toAccountId, categoryId, date, isRecurring'
+      categories: 'id, name, type, parentId, parentCategoryId',
+      transactions: 'id, amount, type, accountId, toAccountId, categoryId, subCategoryId, date, isRecurring, [type+date], [categoryId+date]'
     });
   }
 
   /**
-   * Seeds the database with a robust set of initial categories if empty.
-   * Idempotent check ensures it runs safely on every application reload.
+   * Seeds default parent and sub-categories idempotently.
    */
   async seedDefaultCategories(): Promise<void> {
     const existingCount = await this.categories.count();
-    
-    // If categories already exist, don't write duplicates
     if (existingCount > 0) return;
 
     const defaultCategories: Category[] = [
-      // Core Income Categories
-      { id: 'cat-salary', name: 'Salary', type: 'income' },
-      { id: 'cat-investments', name: 'Investment Returns', type: 'income' },
-      { id: 'cat-freelance', name: 'Freelance & Side Hustles', type: 'income' },
-      { id: 'cat-income-other', name: 'Other Income', type: 'income' },
+      // Income Categories
+      { id: 'cat-salary', name: 'Salary', type: 'income', icon: 'briefcase', color: '#10B981' },
+      { id: 'cat-investments', name: 'Investment Returns', type: 'income', icon: 'trending-up', color: '#3B82F6' },
+      { id: 'cat-freelance', name: 'Freelance & Side Hustles', type: 'income', icon: 'laptop', color: '#8B5CF6' },
+      { id: 'cat-income-other', name: 'Other Income', type: 'income', icon: 'dollar-sign', color: '#6B7280' },
 
       // Essential Expense Categories
-      { id: 'cat-food', name: 'Food & Dining', type: 'expense' },
-      { id: 'cat-groceries', name: 'Groceries', type: 'expense' },
-      { id: 'cat-rent', name: 'Rent & Housing', type: 'expense' },
-      { id: 'cat-utilities', name: 'Bills & Utilities', type: 'expense' },
-      { id: 'cat-transport', name: 'Fuel & Transport', type: 'expense' },
+      { id: 'cat-food', name: 'Food & Dining', type: 'expense', icon: 'utensils', color: '#F59E0B' },
+      { id: 'cat-groceries', name: 'Groceries', type: 'expense', icon: 'shopping-cart', color: '#10B981' },
+      { id: 'cat-rent', name: 'Rent & Housing', type: 'expense', icon: 'home', color: '#EF4444' },
+      { id: 'cat-utilities', name: 'Bills & Utilities', type: 'expense', icon: 'zap', color: '#6366F1' },
+      { id: 'cat-transport', name: 'Fuel & Transport', type: 'expense', icon: 'navigation', color: '#EC4899' },
       
       // Lifestyle & Discretionary Expenses
-      { id: 'cat-shopping', name: 'Shopping', type: 'expense' },
-      { id: 'cat-entertainment', name: 'Entertainment & OTT', type: 'expense' },
-      { id: 'cat-netflix', name: 'Netflix', type: 'expense', parentId: 'cat-entertainment', color: '#E50914', icon: 'tv' },
-      { id: 'cat-medical', name: 'Medical & Healthcare', type: 'expense' },
-      { id: 'cat-expense-other', name: 'Miscellaneous', type: 'expense' }
+      { id: 'cat-shopping', name: 'Shopping', type: 'expense', icon: 'shopping-bag', color: '#8B5CF6' },
+      { id: 'cat-entertainment', name: 'Entertainment & OTT', type: 'expense', icon: 'film', color: '#A855F7' },
+      { id: 'cat-netflix', name: 'Netflix', type: 'expense', parentId: 'cat-entertainment', parentCategoryId: 'cat-entertainment', color: '#E50914', icon: 'tv' },
+      { id: 'cat-medical', name: 'Medical & Healthcare', type: 'expense', icon: 'activity', color: '#06B6D4' },
+      { id: 'cat-expense-other', name: 'Miscellaneous', type: 'expense', icon: 'more-horizontal', color: '#9CA3AF' }
     ];
 
     await this.categories.bulkAdd(defaultCategories);

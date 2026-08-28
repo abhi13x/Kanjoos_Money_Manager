@@ -33,7 +33,8 @@ export const TabMenu: React.FC<TabMenuProps> = ({ value, onChange }) => {
       sx={{ 
         borderBottom: 1, 
         borderColor: 'divider',
-        bgcolor: 'background.paper', // Matches current light/dark paper theme background
+        bgcolor: 'background.paper',
+        paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 12px)`,
       }} 
     >
       {tabs.map((tab) => (

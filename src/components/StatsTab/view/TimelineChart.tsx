@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Card,
@@ -8,21 +8,33 @@ import {
 } from '@mui/material';
 import { TrendingUp } from 'lucide-react';
 
-interface TimelineChartProps {
-  timelineData: Array<{
-    label: string;
-    val: number;
-    tooltipDate: string;
-  }>;
-  lineYAxis: {
-    ticks: number[];
-    max: number;
-  };
+export interface TimelineDataPoint {
+  label: string;
+  val: number;
+  tooltipDate: string;
+}
+
+export interface LineYAxis {
+  ticks: number[];
+  max: number;
+}
+
+export interface TimelineChartProps {
+  timelineData: TimelineDataPoint[];
+  lineYAxis: LineYAxis;
   selectedCategoryName: string;
   hoveredLineIndex: number | null;
   setHoveredLineIndex: (idx: number | null) => void;
   format: (cents: number) => string;
 }
+
+// Compact currency formatter for Y-axis labels (e.g., 1000000 cents -> ₹10k)
+const formatCompact = (cents: number): string => {
+  const amount = cents / 100;
+  if (amount >= 1000000) return `₹${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `₹${(amount / 1000).toFixed(0)}k`;
+  return `₹${amount}`;
+};
 
 export const TimelineChart: React.FC<TimelineChartProps> = ({
   timelineData,
@@ -33,207 +45,194 @@ export const TimelineChart: React.FC<TimelineChartProps> = ({
   format,
 }) => {
   const theme = useTheme();
+  const count = timelineData.length;
+
+  // Chart dimensions in SVG coordinate space
+  const svgWidth = 500;
+  const svgHeight = 200;
+  const paddingLeft = 55;  // Space for Y-axis labels
+  const paddingRight = 20; // Symmetric right margin
+  const paddingTop = 20;   // Top headroom
+  const paddingBottom = 35;// Space for X-axis labels
+
+  const plotWidth = svgWidth - paddingLeft - paddingRight;
+  const plotHeight = svgHeight - paddingTop - paddingBottom;
+
+  const safeMax = useMemo(() => (lineYAxis.max > 0 ? lineYAxis.max : 1), [lineYAxis.max]);
+
+  // Compute exact coordinates for SVG rendering
+  const { pointsString, calculatedPoints } = useMemo(() => {
+    if (count === 0) return { pointsString: '', calculatedPoints: [] };
+
+    const points = timelineData.map((item, idx) => {
+      const x = count === 1
+        ? paddingLeft + plotWidth / 2
+        : paddingLeft + (idx / (count - 1)) * plotWidth;
+      const y = paddingTop + plotHeight - (item.val / safeMax) * plotHeight;
+      return { x, y, item, idx };
+    });
+
+    const pointsString = points.map((p) => `${p.x},${p.y}`).join(' ');
+    return { pointsString, calculatedPoints: points };
+  }, [timelineData, safeMax, count, plotWidth, plotHeight, paddingLeft, paddingTop]);
+
+  // X-axis label filtering (up to 6 ticks)
+  const xTicks = useMemo(() => {
+    if (count === 0) return [];
+    if (count <= 6) return timelineData.map((d, i) => ({ label: d.label, index: i }));
+    const step = (count - 1) / 5;
+    return Array.from({ length: 6 }, (_, i) => {
+      const idx = Math.round(i * step);
+      return { label: timelineData[idx]?.label || '', index: idx };
+    });
+  }, [count, timelineData]);
+
+  // Active hover tooltip positioning
+  const activePoint = hoveredLineIndex !== null ? calculatedPoints[hoveredLineIndex] : null;
+
   return (
     <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
           <TrendingUp size={18} /> {selectedCategoryName} Timeline
         </Typography>
 
-        {timelineData.length === 0 ? (
+        {count === 0 ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', py: 5, textAlign: 'center' }}>
             No transactions recorded for the selected time horizon and category filter.
           </Typography>
         ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '85px 1fr', gap: 1, alignItems: 'stretch', mt: 1 }}>
-            <Box
-              sx={{
-                position: 'relative',
-                height: '180px',
-                borderRight: '1px solid',
-                borderColor: 'divider',
-                pr: 1.5,
-              }}
+          <Box sx={{ width: '100%', position: 'relative' }}>
+            <svg
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+              preserveAspectRatio="xMidYMid meet"
+              style={{ overflow: 'visible' }}
             >
-              {lineYAxis.ticks.map((tickVal, i) => {
-                const topPercent = (1 - tickVal / lineYAxis.max) * 100;
+              {/* Horizontal Gridlines & Y-Axis Labels */}
+              {lineYAxis.ticks.map((tickVal, idx) => {
+                const yPos = paddingTop + plotHeight - (tickVal / safeMax) * plotHeight;
                 return (
-                  <Typography
-                    key={i}
-                    variant="caption"
-                    sx={{
-                      position: 'absolute',
-                      top: `${topPercent}%`,
-                      right: '12px',
-                      transform: 'translateY(-50%)',
-                      fontSize: '0.65rem',
-                      color: 'text.secondary',
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {format(tickVal)}
-                  </Typography>
+                  <g key={idx}>
+                    <line
+                      x1={paddingLeft}
+                      y1={yPos}
+                      x2={svgWidth - paddingRight}
+                      y2={yPos}
+                      stroke={theme.palette.divider}
+                      strokeWidth="0.8"
+                      strokeDasharray={idx === 0 ? undefined : '3 3'}
+                    />
+                    <text
+                      x={paddingLeft - 8}
+                      y={yPos + 3}
+                      textAnchor="end"
+                      fill={theme.palette.text.secondary}
+                      fontSize="11"
+                      fontWeight="600"
+                    >
+                      {formatCompact(tickVal)}
+                    </text>
+                  </g>
                 );
               })}
-            </Box>
 
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: '215px' }}>
-              <Box sx={{ height: '180px', position: 'relative', width: '100%' }}>
-                <svg width="100%" height="100%" viewBox="0 0 500 150" preserveAspectRatio="none">
-                  {(() => {
-                    const count = timelineData.length;
-                    const points = timelineData
-                      .map((item, idx) => {
-                        const x = count === 1 ? 250 : (idx / (count - 1)) * 460 + 20;
-                        const y = 140 - (item.val / lineYAxis.max) * 130;
-                        return `${x},${y}`;
-                      })
-                      .join(' ');
+              {/* Gradient Underlay */}
+              {count > 1 && (
+                <polygon
+                  points={`${paddingLeft},${paddingTop + plotHeight} ${pointsString} ${svgWidth - paddingRight},${paddingTop + plotHeight}`}
+                  fill={theme.palette.primary.main}
+                  fillOpacity={0.1}
+                />
+              )}
 
-                    return (
-                      <>
-                        {lineYAxis.ticks.map((tickVal, idx) => {
-                          const yPos = 140 - (tickVal / lineYAxis.max) * 130;
-                          return (
-                            <line
-                              key={idx}
-                              x1="0"
-                              y1={yPos}
-                              x2="500"
-                              y2={yPos}
-                              stroke={theme.palette.divider}
-                              strokeWidth="0.8"
-                              strokeDasharray={idx === lineYAxis.ticks.length - 1 ? undefined : '3 3'}
-                            />
-                          );
-                        })}
+              {/* Connecting Line */}
+              {count > 1 && (
+                <polyline
+                  fill="none"
+                  stroke={theme.palette.primary.main}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={pointsString}
+                />
+              )}
 
-                        {count > 1 && (
-                          <path d={`M 20,140 L ${points} L 480,140 Z`} fill="rgba(33, 150, 243, 0.12)" stroke="none" />
-                        )}
+              {/* Data Circles */}
+              {calculatedPoints.map(({ x, y, idx }) => {
+                const isHovered = hoveredLineIndex === idx;
+                return (
+                  <circle
+                    key={idx}
+                    cx={x}
+                    cy={y}
+                    r={isHovered ? 6 : 4}
+                    fill={theme.palette.background.paper}
+                    stroke={theme.palette.primary.main}
+                    strokeWidth="2"
+                    style={{ cursor: 'pointer', transition: 'all 0.15s ease-in-out' }}
+                    onMouseEnter={() => setHoveredLineIndex(idx)}
+                    onMouseLeave={() => setHoveredLineIndex(null)}
+                  />
+                );
+              })}
 
-                        {count > 1 && (
-                          <polyline fill="none" stroke="#2196F3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={points} />
-                        )}
+              {/* X-Axis Labels */}
+              {xTicks.map(({ label, index }) => {
+                const xPos = count === 1
+                  ? paddingLeft + plotWidth / 2
+                  : paddingLeft + (index / (count - 1)) * plotWidth;
 
-                        {timelineData.map((item, idx) => {
-                          const x = count === 1 ? 250 : (idx / (count - 1)) * 460 + 20;
-                          const y = 140 - (item.val / lineYAxis.max) * 130;
-                          const isHovered = hoveredLineIndex === idx;
+                // Explicitly type textAnchor to match SVG attributes
+                let textAnchor: 'start' | 'end' | 'middle' = 'middle';
+                if (index === 0 && count > 1) textAnchor = 'start';
+                if (index === count - 1 && count > 1) textAnchor = 'end';
 
-                          return (
-                            <circle
-                              key={idx}
-                              cx={x}
-                              cy={y}
-                              r={isHovered ? '7' : '5'}
-                              fill={theme.palette.background.paper}
-                              stroke="#2196F3"
-                              strokeWidth="2.5"
-                              style={{ cursor: 'pointer', transition: 'all 0.15s' }}
-                              onMouseEnter={() => setHoveredLineIndex(idx)}
-                              onMouseLeave={() => setHoveredLineIndex(null)}
-                            />
-                          );
-                        })}
-                      </>
-                    );
-                  })()}
-                </svg>
+                return (
+                  <text
+                    key={index}
+                    x={xPos}
+                    y={svgHeight - 8}
+                    textAnchor={textAnchor}
+                    fill={theme.palette.text.secondary}
+                    fontSize="11"
+                    fontWeight="600"
+                  >
+                    {label}
+                  </text>
+                );
+              })}
+            </svg>
 
-                {hoveredLineIndex !== null && timelineData[hoveredLineIndex] && (
-                  <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
-                    {(() => {
-                      const point = timelineData[hoveredLineIndex];
-                      const count = timelineData.length;
-                      const xPercent = count === 1 ? 50 : (hoveredLineIndex / (count - 1)) * 92 + 4;
-                      const yVal = 140 - (point.val / lineYAxis.max) * 130;
-                      const yPercent = (yVal / 150) * 100;
-
-                      return (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            left: `${xPercent}%`,
-                            top: `${yPercent}%`,
-                            transform: 'translate(-50%, -120%)',
-                            bgcolor: 'background.paper',
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            px: 1.2,
-                            py: 0.6,
-                            borderRadius: '8px',
-                            boxShadow: 4,
-                            zIndex: 20,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.68rem', color: 'text.secondary', display: 'block' }}>
-                            {point.tooltipDate}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.78rem' }}>
-                            {format(point.val)}
-                          </Typography>
-                        </Box>
-                      );
-                    })()}
-                  </Box>
-                )}
+            {/* Hover Tooltip Overlay */}
+            {activePoint && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: `${(activePoint.x / svgWidth) * 100}%`,
+                  top: `${(activePoint.y / svgHeight) * 100}%`,
+                  transform: 'translate(-50%, -125%)',
+                  bgcolor: 'background.paper',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  px: 1.2,
+                  py: 0.5,
+                  borderRadius: '8px',
+                  boxShadow: 4,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  zIndex: 10,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 800, fontSize: '0.68rem', color: 'text.secondary', display: 'block' }}>
+                  {activePoint.item.tooltipDate}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800, fontSize: '0.78rem' }}>
+                  {format(activePoint.item.val)}
+                </Typography>
               </Box>
-
-              <Box sx={{ position: 'relative', height: '35px', width: '100%', mt: 0.5 }}>
-                {(() => {
-                  const count = timelineData.length;
-                  if (count === 0) return null;
-
-                  let indicesToDisplay: number[] = [];
-                  if (count <= 6) {
-                    indicesToDisplay = timelineData.map((_, i) => i);
-                  } else {
-                    const step = (count - 1) / 5;
-                    indicesToDisplay = Array.from({ length: 6 }, (_, i) => Math.round(i * step));
-                  }
-
-                  return indicesToDisplay.map((pointIdx) => {
-                    const item = timelineData[pointIdx];
-                    if (!item) return null;
-                    const leftPercent = count === 1 ? 50 : (pointIdx / (count - 1)) * 92 + 4;
-
-                    return (
-                      <Box
-                        key={pointIdx}
-                        sx={{
-                          position: 'absolute',
-                          left: `${leftPercent}%`,
-                          transform:
-                            count === 1
-                              ? 'translateX(-50%)'
-                              : pointIdx === 0
-                                ? 'translateX(0%)'
-                                : pointIdx === count - 1
-                                  ? 'translateX(-100%)'
-                                  : 'translateX(-50%)',
-                          textAlign:
-                            count === 1
-                              ? 'center'
-                              : pointIdx === 0
-                                ? 'left'
-                                : pointIdx === count - 1
-                                  ? 'right'
-                                  : 'center',
-                        }}
-                      >
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.68rem', whiteSpace: 'nowrap' }}>
-                          {item.label}
-                        </Typography>
-                      </Box>
-                    );
-                  });
-                })()}
-              </Box>
-            </Box>
+            )}
           </Box>
         )}
       </CardContent>
