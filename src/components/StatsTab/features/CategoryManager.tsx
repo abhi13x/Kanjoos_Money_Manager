@@ -68,6 +68,8 @@ export const getSortedCategoryOptions = (
 
 /**
  * Functional, highly-optimized category expenditure breakdown generator using Map primitives.
+ * - If selectedCategory is 'all' or empty: groups by Parent Categories.
+ * - If a specific parent category is selected: groups by Child Subcategories.
  */
 export const getCategoryBreakdown = (
   breakdownFilteredTx: Transaction[],
@@ -78,6 +80,75 @@ export const getCategoryBreakdown = (
     categories.map((c) => [c.id, c])
   );
 
+  const isFilteredByParent = Boolean(selectedCategory && selectedCategory !== 'all');
+
+  // Branch 1: Specific Parent Category Selected -> Group into Child Subcategories
+  if (isFilteredByParent) {
+    const targetCategory = categoryLookupMap.get(selectedCategory);
+    const parentColor = targetCategory?.color;
+
+    type SubAcc = {
+      id: string;
+      name: string;
+      amount: number;
+    };
+
+    const subAggregatesMap = new Map<string, SubAcc>();
+    let totalSelectedAmount = 0;
+
+    for (const tx of breakdownFilteredTx) {
+      if (!transactionMatchesCategory(tx, selectedCategory, categories)) {
+        continue;
+      }
+
+      const txExt = tx as ExtendedTransaction;
+      const txCat = tx.categoryId ? categoryLookupMap.get(tx.categoryId) : undefined;
+      const txSubCat = txExt.subCategoryId ? categoryLookupMap.get(txExt.subCategoryId) : undefined;
+
+      let childId: string;
+      let childName: string;
+
+      if (txSubCat && txSubCat.id !== selectedCategory) {
+        childId = txSubCat.id;
+        childName = txSubCat.name;
+      } else if (txCat && getParentId(txCat) === selectedCategory) {
+        childId = txCat.id;
+        childName = txCat.name;
+      } else {
+        childId = `${selectedCategory}-direct`;
+        childName = targetCategory ? `${targetCategory.name} (Direct)` : 'General / Direct';
+      }
+
+      let existing = subAggregatesMap.get(childId);
+      if (!existing) {
+        existing = { id: childId, name: childName, amount: 0 };
+        subAggregatesMap.set(childId, existing);
+      }
+
+      existing.amount += tx.amount;
+      totalSelectedAmount += tx.amount;
+    }
+
+    return Array.from(subAggregatesMap.values())
+      .map((item, index) => {
+        const percentage = totalSelectedAmount > 0 
+          ? roundToTwoDecimals((item.amount / totalSelectedAmount) * 100) 
+          : 0;
+        const color = parentColor || CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+
+        return {
+          id: item.id,
+          name: item.name,
+          amount: item.amount,
+          percentage,
+          color,
+          subCategories: [],
+        };
+      })
+      .sort((a, b) => b.amount - a.amount);
+  }
+
+  // Branch 2: 'all' Selected -> Group into Parent Categories with Nested Subcategories
   type AccValue = {
     id: string;
     name: string;
@@ -90,12 +161,7 @@ export const getCategoryBreakdown = (
   let totalAmount = 0;
 
   for (const tx of breakdownFilteredTx) {
-    if (!transactionMatchesCategory(tx, selectedCategory, categories)) {
-      continue;
-    }
-
     const txExt = tx as ExtendedTransaction;
-    // Null-safe lookup for optional categoryId
     const txCat = tx.categoryId ? categoryLookupMap.get(tx.categoryId) : undefined;
     const txSubCat = txExt.subCategoryId ? categoryLookupMap.get(txExt.subCategoryId) : undefined;
 
@@ -189,6 +255,6 @@ export const getSelectedCategoryName = (
   selectedCategory: string,
   categories: Category[]
 ): string => {
-  if (selectedCategory === 'all') return 'All Categories';
+  if (selectedCategory === 'all' || !selectedCategory) return 'All Categories';
   return categories.find((c) => c.id === selectedCategory)?.name ?? 'Category';
 };

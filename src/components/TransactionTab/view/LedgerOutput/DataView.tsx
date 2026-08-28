@@ -3,9 +3,13 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 
-// Number/currency formatting helper
-const format = (amount: number) =>
-  (amount / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+/** Default currency formatter fallback converting cents to INR (₹) */
+const defaultFormat = (cents: number): string =>
+  (cents / 100).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+
+interface FormatProp {
+  format: (cents: number) => string;
+}
 
 const GroupTitle: FC<{ groupTitle: string }> = ({ groupTitle }) => {
   return (
@@ -24,7 +28,7 @@ const GroupTitle: FC<{ groupTitle: string }> = ({ groupTitle }) => {
   );
 };
 
-const TotalIncome: FC<{ totalIncome: number }> = ({ totalIncome }) => {
+const TotalIncome: FC<{ totalIncome: number } & FormatProp> = ({ totalIncome, format }) => {
   return (
     <Chip
       label={`Income: ${format(totalIncome)}`}
@@ -44,7 +48,7 @@ const TotalIncome: FC<{ totalIncome: number }> = ({ totalIncome }) => {
   );
 };
 
-const TotalExpense: FC<{ totalExpense: number }> = ({ totalExpense }) => {
+const TotalExpense: FC<{ totalExpense: number } & FormatProp> = ({ totalExpense, format }) => {
   return (
     <Chip
       label={`Expense: ${format(totalExpense)}`}
@@ -64,7 +68,7 @@ const TotalExpense: FC<{ totalExpense: number }> = ({ totalExpense }) => {
   );
 };
 
-const NetCents: FC<{ netCents: number }> = ({ netCents }) => {
+const NetCents: FC<{ netCents: number } & FormatProp> = ({ netCents, format }) => {
   const isPositive = netCents > 0;
   return (
     <Chip
@@ -91,12 +95,21 @@ const NetCents: FC<{ netCents: number }> = ({ netCents }) => {
   );
 };
 
-export const GroupTotalAndTitle: FC<{
+export interface GroupTotalAndTitleProps {
   groupTitle: string;
   totalIncome: number;
   totalExpense: number;
   netCents: number;
-}> = ({ groupTitle, totalIncome, totalExpense, netCents }) => {
+  format?: (cents: number) => string;
+}
+
+export const GroupTotalAndTitle: FC<GroupTotalAndTitleProps> = ({
+  groupTitle,
+  totalIncome,
+  totalExpense,
+  netCents,
+  format = defaultFormat,
+}) => {
   return (
     <Box
       sx={{
@@ -130,9 +143,9 @@ export const GroupTotalAndTitle: FC<{
           scrollbarWidth: 'none',
         }}
       >
-        {totalIncome !== 0 && <TotalIncome totalIncome={totalIncome} />}
-        {totalExpense !== 0 && <TotalExpense totalExpense={totalExpense} />}
-        {netCents !== 0 && <NetCents netCents={netCents} />}
+        {totalIncome !== 0 && <TotalIncome totalIncome={totalIncome} format={format} />}
+        {totalExpense !== 0 && <TotalExpense totalExpense={totalExpense} format={format} />}
+        {netCents !== 0 && <NetCents netCents={netCents} format={format} />}
       </Box>
     </Box>
   );

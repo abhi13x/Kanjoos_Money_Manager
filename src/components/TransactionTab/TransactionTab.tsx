@@ -24,6 +24,19 @@ const VIEW_MODE_MAP: Record<number, ViewMode> = {
   2: 'yearly',
 };
 
+/** Helper to convert 'YYYY-MM-DD' strings safely into start/end of day epoch numbers */
+const parseDateFilter = (dateStr: string, isEnd: boolean = false): number | null => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  if (isEnd) {
+    d.setHours(23, 59, 59, 999);
+  } else {
+    d.setHours(0, 0, 0, 0);
+  }
+  return d.getTime();
+};
+
 /*
  * Main Transactions Tab Component
  * Displays transaction history with filtering, grouping, and actions
@@ -44,9 +57,13 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
 
   const viewMode = VIEW_MODE_MAP[value] || 'daily';
 
-  // 1. Filtered and Sorted Transactions (Latest First)
+  // 1. Filtered and Sorted Transactions (Latest First) with Proper Epoch Translation
   const filteredTx = useMemo(
-    () => filterAndSortTransactions(transactions, { startDate, endDate }),
+    () =>
+      filterAndSortTransactions(transactions, {
+        startDate: parseDateFilter(startDate, false),
+        endDate: parseDateFilter(endDate, true),
+      }),
     [transactions, startDate, endDate]
   );
 

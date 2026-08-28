@@ -1,58 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Typography from '@mui/material/Typography';
+import Grid from '@mui/material/Grid';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import Stack from '@mui/material/Stack';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import type { SxProps, Theme } from '@mui/material/styles';
 import {
-  Box, Card, CardContent, Typography,
-  Grid, TextField, Button, MenuItem, Alert, Stack,
-  List, ListItemButton, ListItemIcon, ListItemText, Chip,
-  Divider,
-} from '@mui/material';
-import {
-  Globe, Cloud, Upload, Download, LogOut,
-  LogIn, Tag, ChevronRight, CheckCircle2
+  Globe,
+  Cloud,
+  Upload,
+  Download,
+  LogOut,
+  LogIn,
+  Tag,
+  ChevronRight,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useGDriveSession } from '@/hooks/useGDriveSession';
-import { GDriveSyncService } from '@/services/gdriveSync';
 
-interface SettingsTabProps {
+export interface SettingsTabProps {
+  /** Callback to navigate to category management screen */
   onNavigateToCategories: () => void;
+  /** Optional container style overrides */
+  sx?: SxProps<Theme>;
 }
 
 const USERNAME_STORAGE_KEY = 'kanjoos_username';
+const DEFAULT_USERNAME = 'Abhishek';
 
-export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories }) => {
-  const { defaultCurrency, updateDefaultCurrency, themeMode, updateThemeMode } = useSettings();
-  const gDriveSession = useGDriveSession();
+/**
+ * Settings tab component supporting theme configuration, currency selection,
+ * user profile edits, and Google Drive cloud backup synchronization.
+ */
+export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories, sx }) => {
+  const { defaultCurrency, updateDefaultCurrency } = useSettings();
 
-  // Extract from hook with fallback to direct service calls
-  const { isConnected, disconnect, exportBackup, importBackup } = gDriveSession;
-  const connect = (gDriveSession as any).connect;
+  // Reactive Google Drive session state
+  const {
+    isConnected,
+    isSyncing,
+    lastSyncTime,
+    error: hookError,
+    isPending,
+    ensureAuthenticated,
+    disconnect,
+    exportBackup,
+    importBackup,
+  } = useGDriveSession();
 
-  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  // Local notification banner states
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const syncService = GDriveSyncService.getInstance();
-    const unsubscribe = syncService.subscribe((status) => {
-      setLastSyncTime(status.lastSyncTime);
-    });
-    return () => unsubscribe();
-  }, []);
+  const activeError = localError || hookError;
+  const isBusy = isSyncing || isPending;
 
-  // Username State with Timer Ref and Event Dispatch
+  /* ==========================================================
+     PROFILE NAME STATE & LOCALSTORAGE SYNCHRONIZATION
+     ========================================================== */
+
   const [profileName, setProfileName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek';
+      return localStorage.getItem(USERNAME_STORAGE_KEY) || DEFAULT_USERNAME;
     }
-    return 'Abhishek';
+    return DEFAULT_USERNAME;
   });
+
   const [profileSavedMsg, setProfileSavedMsg] = useState<boolean>(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleProfileNameChange = (newName: string) => {
+  const handleProfileNameChange = useCallback((newName: string) => {
     setProfileName(newName);
-    localStorage.setItem(USERNAME_STORAGE_KEY, newName);
-    
-    // Dispatch event to inform Dashboard instantly
-    window.dispatchEvent(new Event('kanjoos_username_updated'));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(USERNAME_STORAGE_KEY, newName);
+      window.dispatchEvent(new Event('kanjoos_username_updated'));
+    }
 
     setProfileSavedMsg(true);
     if (saveTimerRef.current) {
@@ -61,107 +96,77 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     saveTimerRef.current = setTimeout(() => {
       setProfileSavedMsg(false);
     }, 2000);
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
     };
   }, []);
 
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  /* ==========================================================
+     CLOUD BACKUP ACTIONS & ERROR HANDLING
+     ========================================================== */
+
+  const formatErrorMessage = useCallback((err: unknown, fallbackMessage: string): string => {
+    if (err instanceof Error) {
+      const msg = err.message;
+      if (msg.includes('Forbidden') || msg.includes('403')) {
+        return 'Google Drive API is not enabled for this project. Check Cloud Console API permissions.';
+      }
+      if (msg.includes('Unauthorized') || msg.includes('401')) {
+        return 'OAuth session expired. Please sign in again.';
+      }
+      return msg;
+    }
+    return fallbackMessage;
+  }, []);
 
   const handleGoogleSignIn = async () => {
-    setIsSyncing(true);
-    setSyncError(null);
+    setLocalError(null);
     setSyncStatus(null);
-
     try {
-      if (typeof connect === 'function') {
-        await connect();
-      } else {
-        await GDriveSyncService.getInstance().authenticate();
-      }
-      setSyncStatus('✓ Successfully signed in to Google Drive!');
+      await ensureAuthenticated();
+      setSyncStatus('✓ Connected to Google Drive!');
     } catch (err: unknown) {
-      let message = 'Failed to sign in with Google.';
-      if (err instanceof Error) {
-        message = err.message;
-        if (message.includes('Forbidden') || message.includes('403')) {
-          message = 'Google Drive API is not enabled. Please check your project settings.';
-        } else if (message.includes('Unauthorized') || message.includes('401')) {
-          message = 'Session expired. Please try signing in again.';
-        }
-      }
-      setSyncError(message);
-    } finally {
-      setIsSyncing(false);
+      setLocalError(formatErrorMessage(err, 'Failed to authenticate with Google Drive.'));
     }
   };
 
   const handleGoogleExport = async () => {
-    setIsSyncing(true);
-    setSyncError(null);
-    setSyncStatus(null);
-
+    setLocalError(null);
+    setSyncStatus('Uploading backup to Google Drive...');
     try {
-      setSyncStatus('Uploading backup to Google Drive...');
       const backupFileName = await exportBackup();
-      setSyncStatus(`✓ Backup saved to Google Drive ("Backups/${backupFileName}")!`);
+      setSyncStatus(`✓ Backup saved successfully ("Backups/${backupFileName}")!`);
     } catch (err: unknown) {
-      let message = 'Failed to sync with Google Drive.';
-      if (err instanceof Error) {
-        message = err.message;
-        if (message.includes('Forbidden') || message.includes('403')) {
-          message = 'Google Drive API is not enabled. Please check your project settings.';
-        } else if (message.includes('Unauthorized') || message.includes('401')) {
-          message = 'Session expired. Please try signing in again.';
-        }
-      }
-      setSyncError(message);
-    } finally {
-      setIsSyncing(false);
+      setLocalError(formatErrorMessage(err, 'Failed to export backup to Google Drive.'));
     }
   };
 
   const handleGoogleImport = async () => {
-    if (!confirm('Restoring from Google Drive will overwrite your local database with the latest backup. Continue?')) {
+    if (!window.confirm('Restoring from Google Drive will replace current local database records. Continue?')) {
       return;
     }
-
-    setIsSyncing(true);
-    setSyncError(null);
-    setSyncStatus(null);
-
+    setLocalError(null);
+    setSyncStatus('Fetching latest backup file...');
     try {
-      setSyncStatus('Fetching latest backup from Google Drive...');
       await importBackup();
-      setSyncStatus('✓ Local database restored successfully!');
+      setSyncStatus('✓ Database restored successfully!');
     } catch (err: unknown) {
-      let message = 'Failed to restore backup from Google Drive.';
-      if (err instanceof Error) {
-        message = err.message;
-        if (message.includes('Forbidden') || message.includes('403')) {
-          message = 'Google Drive API is not enabled. Please check your project settings.';
-        } else if (message.includes('Unauthorized') || message.includes('401')) {
-          message = 'Session expired. Please try signing in again.';
-        }
-      }
-      setSyncError(message);
-    } finally {
-      setIsSyncing(false);
+      setLocalError(formatErrorMessage(err, 'Failed to restore database from Google Drive.'));
     }
   };
 
   const handleDisconnect = () => {
     disconnect();
-    setSyncStatus('Disconnected Google account.');
+    setSyncStatus('Google Drive disconnected.');
   };
 
   const handleAppleMockLogin = () => {
-    alert('iCloud Keychain sync coming soon!');
+    window.alert('iCloud Keychain sync is coming soon!');
   };
 
   const formattedLastSync = lastSyncTime
@@ -172,32 +177,61 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     : null;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {syncError && (
-        <Alert severity="error" onClose={() => setSyncError(null)} sx={{ borderRadius: '12px' }}>
-          {syncError}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, ...sx }}>
+      {/* Alert Status Banners */}
+      {activeError && (
+        <Alert
+          severity="error"
+          onClose={() => setLocalError(null)}
+          sx={{ borderRadius: '12px' }}
+        >
+          {activeError}
         </Alert>
       )}
+
       {syncStatus && (
-        <Alert severity="success" onClose={() => setSyncStatus(null)} sx={{ borderRadius: '12px' }}>
+        <Alert
+          severity="success"
+          onClose={() => setSyncStatus(null)}
+          sx={{ borderRadius: '12px' }}
+        >
           {syncStatus}
         </Alert>
       )}
 
       <Grid container spacing={3}>
-        {/* Profile Configuration */}
+        {/* Profile & Display Settings */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+          <Card
+            variant="outlined"
+            sx={{
+              borderRadius: '18px',
+              borderColor: 'divider',
+              boxShadow: 'none',
+              height: '100%',
+            }}
+          >
             <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>Profile Config</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                Profile Config
+              </Typography>
 
               <TextField
                 label="Username"
                 value={profileName}
                 onChange={(e) => handleProfileNameChange(e.target.value)}
-                helperText={profileSavedMsg ? '✓ Username updated' : 'Editable — updates saved automatically'}
+                helperText={
+                  profileSavedMsg
+                    ? '✓ Username updated'
+                    : 'Editable — saved automatically'
+                }
                 slotProps={{
-                  formHelperText: { sx: { color: profileSavedMsg ? 'success.main' : 'text.secondary' } },
+                  formHelperText: {
+                    sx: {
+                      color: profileSavedMsg ? 'success.main' : 'text.secondary',
+                      fontWeight: profileSavedMsg ? 600 : 400,
+                    },
+                  },
                 }}
                 fullWidth
               />
@@ -209,59 +243,51 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                 onChange={(e) => updateDefaultCurrency(e.target.value)}
                 fullWidth
                 slotProps={{
-  select: {
-    MenuProps: {
-      sx: {
-        width: '100%',
-        '& .MuiMenuItem': {
-          px: { xs: 2, sm: 3 },
-          textAlign: 'center'
-        }
-      }
-    }
-  }
-}}>
+                  select: {
+                    MenuProps: {
+                      slotProps: {
+                        paper: {
+                          sx: {
+                            '& .MuiMenuItem-root': {
+                              px: { xs: 2, sm: 3 },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                }}
+              >
                 <MenuItem value="INR">INR (₹)</MenuItem>
                 <MenuItem value="USD">USD ($)</MenuItem>
                 <MenuItem value="EUR">EUR (€)</MenuItem>
                 <MenuItem value="GBP">GBP (£)</MenuItem>
               </TextField>
-
-              <TextField
-                select
-                label="Theme Mode"
-                value={themeMode}
-                onChange={(e) => updateThemeMode(e.target.value as any)}
-                fullWidth
-                slotProps={{
-  select: {
-    MenuProps: {
-      sx: {
-        width: '100%',
-        '& .MuiMenuItem': {
-          px: { xs: 2, sm: 3 },
-          textAlign: 'center'
-        }
-      }
-    }
-  }
-}}>
-                <MenuItem value="light">Light</MenuItem>
-                <MenuItem value="dark">Dark</MenuItem>
-                <MenuItem value="system">System</MenuItem>
-              </TextField>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Settings Navigation Menu */}
+        {/* Navigation & Preferences */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+          <Card
+            variant="outlined"
+            sx={{
+              borderRadius: '18px',
+              borderColor: 'divider',
+              boxShadow: 'none',
+              height: '100%',
+            }}
+          >
             <CardContent sx={{ p: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800, px: 3, pt: 3, pb: 1 }}>Settings Menu</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 800, px: 3, pt: 3, pb: 1 }}>
+                Settings Menu
+              </Typography>
               <List disablePadding>
-                <ListItemButton onClick={onNavigateToCategories} sx={{ py: 2, px: 3 }}>
-                  <ListItemIcon sx={{ minWidth: 40 }}>
+                <ListItemButton
+                  onClick={onNavigateToCategories}
+                  sx={{ py: 2, px: 3, borderRadius: '12px', mx: 1, my: 0.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40, color: 'primary.main' }}>
                     <Tag size={20} />
                   </ListItemIcon>
                   <ListItemText
@@ -279,14 +305,37 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
           </Card>
         </Grid>
 
-        {/* Sync & Cloud Backup Section */}
+        {/* Cloud Sync & Backup Section */}
         <Grid size={{ xs: 12 }}>
-          <Card sx={{ borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+          <Card
+            variant="outlined"
+            sx={{
+              borderRadius: '18px',
+              borderColor: 'divider',
+              boxShadow: 'none',
+            }}
+          >
             <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>Sync & Backup</Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                }}
+              >
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Sync & Backup
+                </Typography>
                 <Chip
-                  icon={isConnected ? <CheckCircle2 size={16} /> : <Globe size={16} />}
+                  icon={
+                    isConnected ? (
+                      <CheckCircle2 size={16} />
+                    ) : (
+                      <Globe size={16} />
+                    )
+                  }
                   label={isConnected ? 'Google Drive Connected' : 'Not Connected'}
                   color={isConnected ? 'success' : 'default'}
                   variant={isConnected ? 'filled' : 'outlined'}
@@ -297,20 +346,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
 
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {isConnected
-                  ? `Your Google account is active. Automatic sync is enabled. Session persists across app restarts.${
+                  ? `Google Account active. Data sync enabled.${
                       formattedLastSync ? ` Last backup: ${formattedLastSync}` : ''
                     }`
-                  : 'Sign in with your Google Account to enable automatic cloud backups and restore data across devices.'}
+                  : 'Connect Google Drive to automate cloud backups and enable restore across devices.'}
               </Typography>
 
               <Stack spacing={1.5} sx={{ mt: 1 }}>
-                {/* Sign In Button (Visible when not connected) */}
                 {!isConnected && (
                   <Button
                     variant="contained"
                     color="primary"
-                    disabled={isSyncing}
-                    startIcon={<LogIn size={18} />}
+                    disabled={isBusy}
+                    startIcon={
+                      isBusy ? (
+                        <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <LogIn size={18} />
+                      )
+                    }
                     onClick={handleGoogleSignIn}
                     sx={{
                       textTransform: 'none',
@@ -320,16 +374,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                       py: 1.2,
                     }}
                   >
-                    {isSyncing ? 'Connecting...' : 'Sign in with Google'}
+                    {isBusy ? 'Connecting...' : 'Sign in with Google'}
                   </Button>
                 )}
 
-                {/* Backup & Export Button */}
                 <Button
                   variant={isConnected ? 'contained' : 'outlined'}
                   color="primary"
-                  disabled={isSyncing}
-                  startIcon={isSyncing ? <Globe size={18} /> : <Upload size={18} />}
+                  disabled={isBusy}
+                  startIcon={
+                    isBusy ? (
+                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Upload size={18} />
+                    )
+                  }
                   onClick={handleGoogleExport}
                   sx={{
                     textTransform: 'none',
@@ -339,15 +398,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                     py: 1.2,
                   }}
                 >
-                  {isSyncing ? 'Working...' : 'Backup Data to Google Drive'}
+                  {isBusy ? 'Working...' : 'Backup Data to Google Drive'}
                 </Button>
 
-                {/* Restore & Import Button */}
                 <Button
                   variant="outlined"
                   color="info"
-                  disabled={isSyncing}
-                  startIcon={<Download size={18} />}
+                  disabled={isBusy}
+                  startIcon={
+                    isBusy ? (
+                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <Download size={18} />
+                    )
+                  }
                   onClick={handleGoogleImport}
                   sx={{
                     textTransform: 'none',
@@ -360,12 +424,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
                   Restore Latest Backup from Drive
                 </Button>
 
-                {/* Disconnect Option (Visible when connected) */}
                 {isConnected && (
                   <Button
                     variant="text"
                     color="error"
-                    disabled={isSyncing}
+                    disabled={isBusy}
                     startIcon={<LogOut size={18} />}
                     onClick={handleDisconnect}
                     sx={{
@@ -383,7 +446,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
 
                 <Divider sx={{ my: 0.5 }} />
 
-                {/* iCloud Mock Button */}
                 <Button
                   variant="outlined"
                   color="inherit"

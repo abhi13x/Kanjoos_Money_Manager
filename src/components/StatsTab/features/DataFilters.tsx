@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
-import type { Transaction } from '@/db/schema';
+import type { Transaction, Category } from '@/db/schema';
 
 /**
  * Filters transactions based on the selected statType (income or expense).
  */
-export const useBaseTransactions = (transactions: Transaction[], statType: 'expense' | 'income') => {
+export const useBaseTransactions = (
+  transactions: Transaction[], 
+  statType: 'expense' | 'income'
+) => {
   return useMemo(() => {
     return transactions.filter((tx) => tx.type === statType);
   }, [transactions, statType]);
@@ -13,7 +16,10 @@ export const useBaseTransactions = (transactions: Transaction[], statType: 'expe
 /**
  * Generates available time periods based on the selected grouping (month or year).
  */
-export const useAvailablePeriods = (baseTx: Transaction[], groupBy: 'month' | 'year') => {
+export const useAvailablePeriods = (
+  baseTx: Transaction[], 
+  groupBy: 'month' | 'year'
+) => {
   return useMemo(() => {
     const periodSet = new Set<string>();
     baseTx.forEach((tx) => {
@@ -34,7 +40,10 @@ export const useAvailablePeriods = (baseTx: Transaction[], groupBy: 'month' | 'y
 /**
  * Validates and returns the current active period, defaulting to 'all' if invalid.
  */
-export const useEffectivePeriod = (selectedPeriod: string, availablePeriods: string[]) => {
+export const useEffectivePeriod = (
+  selectedPeriod: string, 
+  availablePeriods: string[]
+) => {
   return useMemo(() => {
     if (selectedPeriod === 'all') return 'all';
     return availablePeriods.includes(selectedPeriod) ? selectedPeriod : 'all';
@@ -56,6 +65,32 @@ export const useAvailableYears = (transactions: Transaction[]) => {
     });
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [transactions]);
+};
+
+/**
+ * Resolves a selected category ID into a set of matching IDs.
+ * If a parent category is selected, returns the parent ID along with all child subcategory IDs.
+ */
+export const useMatchingCategoryIds = (
+  selectedCategory: string,
+  categories: Category[]
+) => {
+  return useMemo(() => {
+    if (!selectedCategory || selectedCategory === 'all') {
+      return null; // Indicates no category filtering
+    }
+
+    const matchingIds = new Set<string>([selectedCategory]);
+
+    // Find all children if selectedCategory is a parent
+    categories.forEach((cat) => {
+      if (cat.parentId === selectedCategory) {
+        matchingIds.add(cat.id);
+      }
+    });
+
+    return matchingIds;
+  }, [selectedCategory, categories]);
 };
 
 /**
@@ -84,6 +119,24 @@ export const useBreakdownFilteredTransactions = (
       }
     });
   }, [transactions, statType, effectivePeriod, groupBy]);
+};
+
+/**
+ * Filters transactions by category hierarchy (parent + children).
+ */
+export const useCategoryFilteredTransactions = (
+  transactions: Transaction[],
+  selectedCategory: string,
+  categories: Category[]
+) => {
+  const matchingCategoryIds = useMatchingCategoryIds(selectedCategory, categories);
+
+  return useMemo(() => {
+    if (!matchingCategoryIds) return transactions;
+    return transactions.filter(
+      (tx) => tx.categoryId && matchingCategoryIds.has(tx.categoryId)
+    );
+  }, [transactions, matchingCategoryIds]);
 };
 
 /**

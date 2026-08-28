@@ -14,10 +14,15 @@ import {
   getElapsedMonths,
 } from './investmentFormulas';
 
-const INVESTMENT_ACCOUNT_TYPES: AccountType[] = ['mutual_fund', 'stock', 'fd_rd', 'scheme'];
+const INVESTMENT_ACCOUNT_TYPES: ReadonlySet<AccountType> = new Set([
+  'mutual_fund',
+  'stock',
+  'fd_rd',
+  'scheme',
+]);
 
 export const isInvestmentAccount = (type: AccountType): boolean =>
-  INVESTMENT_ACCOUNT_TYPES.includes(type);
+  INVESTMENT_ACCOUNT_TYPES.has(type);
 
 /** Resolve the formula sub-type from account metadata. */
 export const resolveInvestmentSubType = (account: Account): InvestmentSubType | null => {
@@ -40,139 +45,76 @@ export const resolveInvestmentSubType = (account: Account): InvestmentSubType | 
 export const getRatePercent = (account: Account): number | undefined =>
   account.interestRate ?? account.expectedReturnRate;
 
-const computeFullMaturity = (account: Account, subType: InvestmentSubType): InvestmentResult | null => {
+/** Unified calculation dispatcher for any duration/tenure. */
+export const calculateInvestmentForDuration = (
+  account: Account,
+  subType: InvestmentSubType,
+  tenureMonths: number
+): InvestmentResult | null => {
   const rate = getRatePercent(account);
-  const tenureMonths = account.tenureMonths;
-  if (!rate || !tenureMonths || tenureMonths <= 0) return null;
+  if (!rate || tenureMonths <= 0) return null;
+
+  const { monthlyInvestment, currentBalance, initialBalance, compoundingFrequency } = account;
 
   switch (subType) {
     case 'fd':
       return calculateFD({
-        principalCents: account.currentBalance,
+        principalCents: currentBalance,
         annualRatePercent: rate,
         tenureMonths,
-        compoundingFrequency: account.compoundingFrequency,
+        compoundingFrequency,
       });
 
     case 'rd':
-      if (!account.monthlyInvestment) return null;
+      if (!monthlyInvestment) return null;
       return calculateRD({
-        monthlyDepositCents: account.monthlyInvestment,
+        monthlyDepositCents: monthlyInvestment,
         annualRatePercent: rate,
         tenureMonths,
       });
 
     case 'sip':
-      if (!account.monthlyInvestment) return null;
+      if (!monthlyInvestment) return null;
       return calculateSIP({
-        monthlyInvestmentCents: account.monthlyInvestment,
+        monthlyInvestmentCents: monthlyInvestment,
         annualReturnPercent: rate,
         tenureMonths,
-        existingBalanceCents: account.initialBalance,
+        existingBalanceCents: initialBalance,
       });
 
     case 'lumpsum':
       return calculateLumpSum({
-        principalCents: account.currentBalance,
+        principalCents: currentBalance,
         annualReturnPercent: rate,
         tenureMonths,
       });
 
     case 'ppf':
-      if (!account.monthlyInvestment) return null;
+      if (!monthlyInvestment) return null;
       return calculatePPF({
-        monthlyDepositCents: account.monthlyInvestment,
+        monthlyDepositCents: monthlyInvestment,
         annualRatePercent: rate,
         tenureMonths,
-        existingBalanceCents: account.initialBalance,
+        existingBalanceCents: initialBalance,
       });
 
     case 'nps':
-      if (!account.monthlyInvestment) return null;
+      if (!monthlyInvestment) return null;
       return calculateNPS({
-        monthlyInvestmentCents: account.monthlyInvestment,
+        monthlyInvestmentCents: monthlyInvestment,
         annualReturnPercent: rate,
         tenureMonths,
-        existingBalanceCents: account.initialBalance,
+        existingBalanceCents: initialBalance,
       });
 
     case 'epfo':
-      if (!account.monthlyInvestment) return null;
+      if (!monthlyInvestment) return null;
       return calculateEPFO({
-        monthlyContributionCents: account.monthlyInvestment,
+        monthlyContributionCents: monthlyInvestment,
         annualRatePercent: rate,
         tenureMonths,
-        existingBalanceCents: account.initialBalance,
+        existingBalanceCents: initialBalance,
       });
-
-    default:
-      return null;
-  }
-};
-
-const computeAtMonth = (account: Account, subType: InvestmentSubType, months: number): number | null => {
-  const rate = getRatePercent(account);
-  if (!rate || months <= 0) return null;
-
-  switch (subType) {
-    case 'fd':
-      return calculateFD({
-        principalCents: account.currentBalance,
-        annualRatePercent: rate,
-        tenureMonths: months,
-        compoundingFrequency: account.compoundingFrequency,
-      }).maturityValueCents;
-
-    case 'rd':
-      if (!account.monthlyInvestment) return null;
-      return calculateRD({
-        monthlyDepositCents: account.monthlyInvestment,
-        annualRatePercent: rate,
-        tenureMonths: months,
-      }).maturityValueCents;
-
-    case 'sip':
-      if (!account.monthlyInvestment) return null;
-      return calculateSIP({
-        monthlyInvestmentCents: account.monthlyInvestment,
-        annualReturnPercent: rate,
-        tenureMonths: months,
-        existingBalanceCents: account.initialBalance,
-      }).maturityValueCents;
-
-    case 'lumpsum':
-      return calculateLumpSum({
-        principalCents: account.currentBalance,
-        annualReturnPercent: rate,
-        tenureMonths: months,
-      }).maturityValueCents;
-
-    case 'ppf':
-      if (!account.monthlyInvestment) return null;
-      return calculatePPF({
-        monthlyDepositCents: account.monthlyInvestment,
-        annualRatePercent: rate,
-        tenureMonths: months,
-        existingBalanceCents: account.initialBalance,
-      }).maturityValueCents;
-
-    case 'nps':
-      if (!account.monthlyInvestment) return null;
-      return calculateNPS({
-        monthlyInvestmentCents: account.monthlyInvestment,
-        annualReturnPercent: rate,
-        tenureMonths: months,
-        existingBalanceCents: account.initialBalance,
-      }).maturityValueCents;
-
-    case 'epfo':
-      if (!account.monthlyInvestment) return null;
-      return calculateEPFO({
-        monthlyContributionCents: account.monthlyInvestment,
-        annualRatePercent: rate,
-        tenureMonths: months,
-        existingBalanceCents: account.initialBalance,
-      }).maturityValueCents;
 
     default:
       return null;
@@ -180,13 +122,16 @@ const computeAtMonth = (account: Account, subType: InvestmentSubType, months: nu
 };
 
 /** Project maturity and current value for an investment account. */
-export const projectInvestment = (account: Account, asOf: number = Date.now()): InvestmentProjection | null => {
+export const projectInvestment = (
+  account: Account,
+  asOf: number = Date.now()
+): InvestmentProjection | null => {
   if (!isInvestmentAccount(account.type)) return null;
 
   const subType = resolveInvestmentSubType(account);
-  if (!subType) return null;
+  if (!subType || !account.tenureMonths) return null;
 
-  const fullResult = computeFullMaturity(account, subType);
+  const fullResult = calculateInvestmentForDuration(account, subType, account.tenureMonths);
   if (!fullResult) return null;
 
   const elapsedMonths = account.startDate
@@ -197,20 +142,25 @@ export const projectInvestment = (account: Account, asOf: number = Date.now()): 
     return buildProjection(fullResult, 0);
   }
 
-  const projectedValueCents = computeAtMonth(account, subType, elapsedMonths);
-  if (projectedValueCents === null) return buildProjection(fullResult, 0);
+  const intermediateResult = calculateInvestmentForDuration(account, subType, elapsedMonths);
+  if (!intermediateResult) return buildProjection(fullResult, 0);
 
-  const investedSoFar = subType === 'fd' || subType === 'lumpsum'
+  const projectedValueCents = intermediateResult.maturityValueCents;
+  const isLumpSumType = subType === 'fd' || subType === 'lumpsum';
+  const investedSoFar = isLumpSumType
     ? account.currentBalance
     : (account.initialBalance ?? 0) + (account.monthlyInvestment ?? 0) * elapsedMonths;
+
+  const annualizedReturnPercent =
+    investedSoFar > 0
+      ? ((projectedValueCents / investedSoFar) ** (12 / elapsedMonths) - 1) * 100
+      : 0;
 
   return {
     ...fullResult,
     projectedValueCents,
     remainingMonths: fullResult.tenureMonths - elapsedMonths,
-    annualizedReturnPercent: investedSoFar > 0
-      ? ((projectedValueCents / investedSoFar) ** (12 / elapsedMonths) - 1) * 100
-      : 0,
+    annualizedReturnPercent,
   };
 };
 

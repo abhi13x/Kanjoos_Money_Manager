@@ -1,61 +1,88 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Box, Grid, Card, CardContent, Typography, List, ListItem, ListItemText, Chip, Divider } from '@mui/material';
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, Calendar, CreditCard as CardIcon, LineChart } from 'lucide-react';
 import type { Account, Transaction } from '@/db/schema';
 import { getInvestmentSummaries, getTotalProjectedInterest, getTotalProjectedMaturity } from '@/services/investmentService';
 
 interface SummaryTabProps {
-  accounts: Account[];
-  transactions: Transaction[];
+  accounts?: Account[];
+  transactions?: Transaction[];
   format: (cents: number) => string;
 }
 
-export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, format }) => {
-  // Calculations
-  const totalIncome = transactions
-    .filter((tx) => tx.type === 'income')
-    .reduce((sum, tx) => sum + tx.amount, 0);
+export const SummaryTab: React.FC<SummaryTabProps> = ({
+  accounts = [],
+  transactions = [],
+  format,
+}) => {
+  // Calculations with defensive checks against undefined transaction values
+  const totalIncome = useMemo(() => {
+    return transactions
+      .filter((tx) => tx?.type === 'income')
+      .reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+  }, [transactions]);
 
-  const totalExpense = transactions
-    .filter((tx) => tx.type === 'expense')
-    .reduce((sum, tx) => sum + tx.amount, 0);
+  const totalExpense = useMemo(() => {
+    return transactions
+      .filter((tx) => tx?.type === 'expense')
+      .reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+  }, [transactions]);
 
   const savings = Math.max(0, totalIncome - totalExpense);
 
-  // Group assets: Cash + Savings + Wallets + Investments (Stocks, Mutual Funds, Schemes, FDs)
-  const assetTypes = ['cash', 'savings', 'wallet', 'mutual_fund', 'stock', 'fd_rd', 'scheme'];
-  const totalAssets = accounts
-    .filter((acc) => assetTypes.includes(acc.type))
-    .reduce((sum, acc) => sum + (acc.currentBalance ?? acc.initialBalance), 0);
+  // Group assets safely checking current vs initial balance fallbacks
+  const totalAssets = useMemo(() => {
+    const assetTypes = ['cash', 'savings', 'wallet', 'mutual_fund', 'stock', 'fd_rd', 'scheme'];
+    return accounts
+      .filter((acc) => acc?.type && assetTypes.includes(acc.type))
+      .reduce((sum, acc) => sum + (acc.currentBalance ?? acc.initialBalance ?? 0), 0);
+  }, [accounts]);
 
   // Credit Card Usage Balance Tracking
-  const creditCards = accounts.filter((acc) => acc.type === 'credit_card');
-  const totalCCDebt = creditCards.reduce((sum, acc) => sum + Math.abs(acc.currentBalance), 0);
+  const creditCards = useMemo(() => {
+    return accounts.filter((acc) => acc?.type === 'credit_card');
+  }, [accounts]);
+
+  const totalCCDebt = useMemo(() => {
+    return creditCards.reduce((sum, acc) => sum + Math.abs(acc.currentBalance ?? 0), 0);
+  }, [creditCards]);
 
   // Compute upcoming recurring transactions or investment schedules
-  const upcomingPayments = accounts
-    .filter((acc) => ['mutual_fund', 'stock', 'fd_rd', 'scheme', 'credit_card'].includes(acc.type))
-    .map((acc) => {
-      const today = new Date().getDate();
-      let dueDay = acc.repeatInvestmentDate || acc.dueDate || 5;
-      let status = dueDay >= today ? 'Upcoming' : 'Overdue';
+  const upcomingPayments = useMemo(() => {
+    const today = new Date().getDate();
+    const scheduledTypes = ['mutual_fund', 'stock', 'fd_rd', 'scheme', 'credit_card'];
 
-      return {
-        id: acc.id,
-        name: acc.name,
-        type: acc.type,
-        dueDay,
-        status,
-        amount: acc.type === 'credit_card'
-          ? acc.currentBalance
-          : (acc.monthlyInvestment ?? 0),
-      };
-    })
-    .sort((a, b) => a.dueDay - b.dueDay);
+    return accounts
+      .filter((acc) => acc?.type && scheduledTypes.includes(acc.type))
+      .map((acc) => {
+        const dueDay = acc.repeatInvestmentDate ?? acc.dueDate ?? 5;
+        const status = dueDay >= today ? 'Upcoming' : 'Overdue';
 
-  const investmentSummaries = getInvestmentSummaries(accounts);
-  const totalProjectedMaturity = getTotalProjectedMaturity(accounts);
-  const totalProjectedInterest = getTotalProjectedInterest(accounts);
+        return {
+          id: acc.id,
+          name: acc.name ?? 'Unnamed Account',
+          type: acc.type,
+          dueDay,
+          status,
+          amount: acc.type === 'credit_card'
+            ? (acc.currentBalance ?? 0)
+            : (acc.monthlyInvestment ?? 0),
+        };
+      })
+      .sort((a, b) => a.dueDay - b.dueDay);
+  }, [accounts]);
+
+  const investmentSummaries = useMemo(() => {
+    return getInvestmentSummaries(accounts) ?? [];
+  }, [accounts]);
+
+  const totalProjectedMaturity = useMemo(() => {
+    return getTotalProjectedMaturity(accounts) ?? 0;
+  }, [accounts]);
+
+  const totalProjectedInterest = useMemo(() => {
+    return getTotalProjectedInterest(accounts) ?? 0;
+  }, [accounts]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -113,29 +140,36 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
               </Grid>
             </Grid>
             <List disablePadding>
-              {investmentSummaries.map(({ account, subType, projection }) => (
-                <Box key={account.id}>
-                  <ListItem sx={{ px: 0, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <ListItemText
-                      primary={account.name}
-                      secondary={`${subType.toUpperCase()} · ${account.tenureMonths} mo @ ${account.interestRate ?? account.expectedReturnRate}%`}
-                      slotProps={{
-                        primary: { sx: { fontWeight: 700, fontSize: '0.9rem' } },
-                        secondary: { sx: { fontSize: '0.75rem' } },
-                      }}
-                    />
-                    <Box sx={{ textAlign: 'right' }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                        {format(projection.maturityValueCents)}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
-                        +{format(projection.interestEarnedCents)}
-                      </Typography>
-                    </Box>
-                  </ListItem>
-                  <Divider />
-                </Box>
-              ))}
+              {investmentSummaries.map(({ account, subType, projection }) => {
+                const rate = account.interestRate ?? account.expectedReturnRate ?? 0;
+                const tenure = account.tenureMonths ?? 0;
+                const maturityVal = projection?.maturityValueCents ?? 0;
+                const interestEarned = projection?.interestEarnedCents ?? 0;
+
+                return (
+                  <Box key={account.id}>
+                    <ListItem sx={{ px: 0, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <ListItemText
+                        primary={account.name ?? 'Unnamed Account'}
+                        secondary={`${(subType ?? '').toUpperCase()} · ${tenure} mo @ ${rate}%`}
+                        slotProps={{
+                          primary: { sx: { fontWeight: 700, fontSize: '0.9rem' } },
+                          secondary: { sx: { fontSize: '0.75rem' } },
+                        }}
+                      />
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                          {format(maturityVal)}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
+                          +{format(interestEarned)}
+                        </Typography>
+                      </Box>
+                    </ListItem>
+                    <Divider />
+                  </Box>
+                );
+              })}
             </List>
           </CardContent>
         </Card>
@@ -161,17 +195,16 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
                   creditCards.map((card) => (
                     <Box key={card.id}>
                       <ListItem sx={{ px: 0, py: 1.5, display: 'flex', justifyContent: 'space-between' }}>
-                        {/* Updated legacy typography props to slotProps */}
                         <ListItemText 
-                          primary={card.name} 
-                          secondary={`Due Date: Day ${card.dueDate} | Statement: Day ${card.statementDate}`} 
+                          primary={card.name ?? 'Credit Card'} 
+                          secondary={`Due Date: Day ${card.dueDate ?? '-'} | Statement: Day ${card.statementDate ?? '-'}`} 
                           slotProps={{
                             primary: { sx: { fontWeight: 700, fontSize: '0.9rem' } },
                             secondary: { sx: { fontSize: '0.75rem' } }
                           }}
                         />
                         <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'error.main' }}>
-                          {format(Math.abs(card.currentBalance))}
+                          {format(Math.abs(card.currentBalance ?? 0))}
                         </Typography>
                       </ListItem>
                       <Divider />
@@ -199,7 +232,6 @@ export const SummaryTab: React.FC<SummaryTabProps> = ({ accounts, transactions, 
                   upcomingPayments.map((p) => (
                     <Box key={p.id}>
                       <ListItem sx={{ px: 0, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        {/* Updated legacy typography props to slotProps */}
                         <ListItemText 
                           primary={p.name} 
                           secondary={`Due on Day ${p.dueDay} of this month`} 

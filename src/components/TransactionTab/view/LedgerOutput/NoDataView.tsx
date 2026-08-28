@@ -1,4 +1,8 @@
-export const NoDataView: React.FC = () => {
+import { Card, Typography } from '@mui/material';
+import { ReceiptText } from 'lucide-react';
+import type { FC } from 'react';
+
+export const NoDataView: FC = () => {
     return (
         <Card 
           sx={{ 

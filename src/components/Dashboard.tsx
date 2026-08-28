@@ -11,17 +11,27 @@ import { TransactionsTab } from './TransactionTab/TransactionTab';
 import { StatsTab } from './StatsTab/StatsTab';
 import { AccountsTab } from './AccountsTab';
 import { SettingsTab } from './SettingsTab';
-import { CategoriesTab } from './CategoriesTab';
-import TransactionModal from './TransactionModal';
+import { CategoriesTab } from './CategoriesTab/CategoriesTab';
+import TransactionModal from './TransactionModal/TransactionModal';
 
-import { 
-  Box, Typography, 
-  CircularProgress, Container, Paper, 
-  BottomNavigation, BottomNavigationAction, Fab,
-  AppBar, Toolbar
-} from '@mui/material';
-import { 
-  Plus, LayoutDashboard, ArrowRightLeft, BarChart3, Wallet, Settings
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import BottomNavigation from '@mui/material/BottomNavigation';
+import BottomNavigationAction from '@mui/material/BottomNavigationAction';
+import Fab from '@mui/material/Fab';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+
+import {
+  Plus,
+  LayoutDashboard,
+  ArrowRightLeft,
+  BarChart3,
+  Wallet,
+  Settings,
 } from 'lucide-react';
 
 const USERNAME_STORAGE_KEY = 'kanjoos_username';
@@ -29,7 +39,7 @@ const USERNAME_STORAGE_KEY = 'kanjoos_username';
 export const Dashboard: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<number>(0);
   const [settingsView, setSettingsView] = useState<'main' | 'categories'>('main');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const { isMobile, isTablet } = useWindowSize();
 
   // Dynamic state listener for reactive username updating
@@ -66,66 +76,149 @@ export const Dashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'background.default',
+        }}
+      >
         <CircularProgress size={40} />
       </Box>
     );
   }
 
+  const isDesktop = !isMobile && !isTablet;
+
   return (
-    <Box 
-      sx={{ 
-        minHeight: '100vh', 
-        bgcolor: 'background.default', 
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: 'background.default',
         color: 'text.primary',
         transition: 'background-color 0.2s, color 0.2s',
-        // Dynamic padding based on device to prevent overlap with navigation
-        pb: '88px'
+        // Bottom padding handles fixed navigation bar + iOS Home Indicator safe area
+        pb: {
+          xs: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+          md: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+        },
+        // Top padding offset for desktop fixed AppBar
+        pt: isDesktop ? '72px' : 0,
       }}
     >
-      
-      {/* Responsive Header - AppBar for desktop only (not mobile or tablet) */}
-      {!isMobile && !isTablet && (
-        <AppBar position="fixed" sx={{ top: 0, left: 0, right: 0, zIndex: 1100, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Toolbar sx={{ px: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+      {/* Desktop Header - Fixed AppBar */}
+      {isDesktop && (
+        <AppBar
+          position="fixed"
+          elevation={0}
+          sx={{
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1100,
+            bgcolor: 'background.paper',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Toolbar sx={{ px: 4, height: 72 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                width: '100%',
+              }}
+            >
               <Box>
-                <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-0.05em', color: 'primary.main' }}>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 900,
+                    letterSpacing: '-0.05em',
+                    color: 'primary.main',
+                  }}
+                >
                   KANJOOS
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   Welcome back, {username}
                 </Typography>
               </Box>
-              
             </Box>
           </Toolbar>
         </AppBar>
       )}
 
-{/* Mobile Header - Integrated in main content for mobile and tablet */}
-      {(isMobile || isTablet) && (
-        <Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', py: 2 }}>
-          <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Mobile/iOS Header - Integrated header with iOS Dynamic Island/Notch safe areas */}
+      {!isDesktop && (
+        <Box
+          component="header"
+          sx={{
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            // Accommodate iOS status bar / Dynamic island safe areas
+            pt: 'calc(16px + env(safe-area-inset-top, 0px))',
+            pb: 2,
+          }}
+        >
+          <Container
+            maxWidth="lg"
+            sx={{
+              display: 'flex',
+              justify: 'space-between',
+              alignItems: 'center',
+            }}
+          >
             <Box>
-              <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-0.05em', color: 'primary.main' }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 900,
+                  letterSpacing: '-0.05em',
+                  color: 'primary.main',
+                }}
+              >
                 KANJOOS
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 Welcome back, {username}
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              {/* Mobile menu button could go here if needed */}
-            </Box>
           </Container>
         </Box>
-       )}
-      <Container maxWidth="lg" sx={{ py: (isMobile || isTablet) ? 4 : 6 }}>
-        {currentTab === 0 && <SummaryTab accounts={accounts} transactions={transactions} format={formatAmount} />}
-        {currentTab === 1 && <TransactionsTab transactions={transactions} accounts={accounts} categories={categories} format={formatAmount} />}
-        {currentTab === 2 && <StatsTab transactions={transactions} categories={categories} format={formatAmount} />}
-        {currentTab === 3 && <AccountsTab accounts={accounts} format={formatAmount} />}
+      )}
+
+      {/* Main Tab Content */}
+      <Container maxWidth="lg" sx={{ py: isDesktop ? 5 : 3 }}>
+        {currentTab === 0 && (
+          <SummaryTab
+            accounts={accounts}
+            transactions={transactions}
+            format={formatAmount}
+          />
+        )}
+        {currentTab === 1 && (
+          <TransactionsTab
+            transactions={transactions}
+            accounts={accounts}
+            categories={categories}
+            format={formatAmount}
+          />
+        )}
+        {currentTab === 2 && (
+          <StatsTab
+            transactions={transactions}
+            categories={categories}
+            format={formatAmount}
+          />
+        )}
+        {currentTab === 3 && (
+          <AccountsTab accounts={accounts} format={formatAmount} />
+        )}
 
         {currentTab === 4 && (
           <>
@@ -136,18 +229,29 @@ export const Dashboard: React.FC = () => {
               />
             </Box>
             <Box sx={{ display: settingsView === 'main' ? 'block' : 'none' }}>
-              <SettingsTab onNavigateToCategories={() => setSettingsView('categories')} />
+              <SettingsTab
+                onNavigateToCategories={() => setSettingsView('categories')}
+              />
             </Box>
           </>
         )}
       </Container>
-      
-      {/* Bottom Navigation - fixed at bottom for all devices */}
-      <Paper 
-        elevation={4} 
-        sx={{ 
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
-          borderTop: '1px solid', borderColor: 'divider', borderRadius: 0
+
+      {/* Bottom Navigation Bar - Fixed with iOS safe area padding */}
+      <Paper
+        elevation={4}
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 0,
+          bgcolor: 'background.paper',
+          // Key iOS Safe Area fix for home indicator swipe bar
+          pb: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
         <BottomNavigation
@@ -159,7 +263,17 @@ export const Dashboard: React.FC = () => {
               setSettingsView('main');
             }
           }}
-          sx={{ height: '64px', bgcolor: 'background.paper' }}
+          sx={{
+            height: 64,
+            bgcolor: 'background.paper',
+            '& .MuiBottomNavigationAction-root': {
+              minWidth: 'auto',
+              py: 1,
+              '&.Mui-selected': {
+                color: 'primary.main',
+              },
+            },
+          }}
         >
           <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} />} />
           <BottomNavigationAction label="Transactions" icon={<ArrowRightLeft size={20} />} />
@@ -169,17 +283,21 @@ export const Dashboard: React.FC = () => {
         </BottomNavigation>
       </Paper>
 
-      {/* FAB - Floating action button - for tabs that need it (Summary and Transactions) */}
+      {/* Floating Action Button (FAB) - Positioned dynamically above navigation bar & iOS safe area */}
       {(currentTab === 0 || currentTab === 1) && (
         <Fab
           color="primary"
-          aria-label="add"
+          aria-label="add transaction"
           onClick={() => setIsModalOpen(true)}
           sx={{
             position: 'fixed',
-            right: 24,
-            bottom: 84,
+            right: { xs: 16, sm: 24, md: 32 },
+            bottom: {
+              xs: 'calc(76px + env(safe-area-inset-bottom, 0px))',
+              sm: 'calc(84px + env(safe-area-inset-bottom, 0px))',
+            },
             boxShadow: 4,
+            zIndex: 1050,
           }}
         >
           <Plus size={24} />
@@ -188,11 +306,6 @@ export const Dashboard: React.FC = () => {
 
       {/* Global Transaction Modal Layover */}
       <TransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-
-
-      
-
-
     </Box>
   );
 };

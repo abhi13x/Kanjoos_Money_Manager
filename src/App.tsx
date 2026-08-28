@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import Dashboard from './components/Dashboard';
-import TransactionModal from './components/TransactionModal';
+import TransactionModal from './components/TransactionModal/TransactionModal';
 import { GDriveSyncService } from './services/gdriveSync';
 import { useSettings } from './hooks/useSettings';
 import { getAppTheme } from './services/themeService';

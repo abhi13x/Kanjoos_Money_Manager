@@ -1,5 +1,5 @@
-import React from "react";
-import { Box, Tabs, Tab } from "@mui/material";
+import React, { useMemo, useState } from "react";
+import { Box, Tabs, Tab, useTheme, alpha } from "@mui/material";
 import type { Transaction, Category } from "@/db/schema";
 import {
   getSortedCategoryOptions,
@@ -33,8 +33,9 @@ export const StatsTab: React.FC<StatsTabProps> = ({
   categories,
   format,
 }) => {
+  const theme = useTheme();
   const currentDate = new Date();
-  const [activeTab, setActiveTab] = React.useState(0);
+  const [activeTab, setActiveTab] = useState(0);
 
   const {
     statType,
@@ -55,40 +56,46 @@ export const StatsTab: React.FC<StatsTabProps> = ({
   const effectivePeriod = useEffectivePeriod(selectedPeriod, availablePeriods);
 
   // Breakdown transactions dynamically filtered by header effectivePeriod & groupBy
-  // Directly pass effectivePeriod and groupBy strings
   const breakdownFilteredTx = useBreakdownFilteredTransactions(
     transactions,
     statType,
     effectivePeriod,
     groupBy
   );
-  // Derived data
-  const sortedCategoryOptions = getSortedCategoryOptions(categories, statType);
-  const categoryBreakdown = getCategoryBreakdown(
-    breakdownFilteredTx,
-    categories,
-    selectedCategory
+
+  // Sorted category options (includes parent categories and nested subcategories)
+  const sortedCategoryOptions = useMemo(
+    () => getSortedCategoryOptions(categories, statType),
+    [categories, statType]
   );
+
+  // Generate breakdown chart data
+  const categoryBreakdown = useMemo(
+    () => getCategoryBreakdown(breakdownFilteredTx, categories, selectedCategory),
+    [breakdownFilteredTx, categories, selectedCategory]
+  );
+
   const totalBreakdownAmount = useTotalBreakdownAmount(categoryBreakdown);
-  const timelineData = getTimelineData(
-    baseTx,
-    selectedCategory,
-    groupBy,
-    effectivePeriod,
-    categories
+
+  const timelineData = useMemo(
+    () => getTimelineData(baseTx, selectedCategory, groupBy, effectivePeriod, categories),
+    [baseTx, selectedCategory, groupBy, effectivePeriod, categories]
   );
-  const lineYAxis = getLineYAxis(
-    transactions,
-    selectedCategory,
-    groupBy,
-    effectivePeriod,
-    categories
+
+  const lineYAxis = useMemo(
+    () => getLineYAxis(transactions, selectedCategory, groupBy, effectivePeriod, categories),
+    [transactions, selectedCategory, groupBy, effectivePeriod, categories]
   );
+
   const selectedCategoryName = getSelectedCategoryName(selectedCategory, categories);
-  const periodicData = getPeriodicData(transactions, selectedCategory, groupBy, categories);
+
+  const periodicData = useMemo(
+    () => getPeriodicData(transactions, selectedCategory, groupBy, categories),
+    [transactions, selectedCategory, groupBy, categories]
+  );
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
       {/* Dashboard Control Header */}
       <DashboardControlHeader
         groupBy={groupBy}
@@ -103,29 +110,53 @@ export const StatsTab: React.FC<StatsTabProps> = ({
         sortedCategoryOptions={sortedCategoryOptions}
       />
 
-      {/* Charts Tabs */}
-      <Box sx={{ flexGrow: 1 }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, newValue) => setActiveTab(newValue)}
-          variant="fullWidth"
-          aria-label="Stats charts tabs"
+      {/* iOS HIG Segmented Control Container */}
+      <Box sx={{ width: "100%" }}>
+        <Box
           sx={{
-            borderBottom: 1,
-            borderColor: "divider",
-            bgcolor: "background.paper",
-            borderRadius: "12px 12px 0 0",
+            p: "3px",
+            bgcolor: alpha(theme.palette.text.primary, 0.06),
+            borderRadius: "12px",
           }}
         >
-          <Tab label="Category Breakdown" value={0} />
-          <Tab label="Temporal Volumes" value={1} />
-          <Tab label="Timeline" value={2} />
-        </Tabs>
+          <Tabs
+            value={activeTab}
+            onChange={(_, newValue) => setActiveTab(newValue)}
+            variant="fullWidth"
+            aria-label="Stats charts tabs"
+            sx={{
+              minHeight: 40,
+              "& .MuiTabs-indicator": {
+                display: "none", // Modern MUI way to hide default indicator line
+              },
+              "& .MuiTab-root": {
+                minHeight: 40,
+                borderRadius: "9px",
+                fontSize: "13px", // iOS Footnote typography scale
+                fontWeight: 600,
+                lineHeight: "18px",
+                letterSpacing: "-0.08px",
+                textTransform: "none",
+                color: "text.secondary",
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                "&.Mui-selected": {
+                  color: "text.primary",
+                  bgcolor: "background.paper",
+                  boxShadow: "0px 3px 8px rgba(0, 0, 0, 0.12), 0px 3px 1px rgba(0, 0, 0, 0.04)",
+                },
+              },
+            }}
+          >
+            <Tab label="Category Breakdown" value={0} />
+            <Tab label="Temporal Volumes" value={1} />
+            <Tab label="Timeline" value={2} />
+          </Tabs>
+        </Box>
 
         {/* Tab Panels */}
-        <Box sx={{ p: { xs: 1, sm: 2.5 }, flexGrow: 1, overflow: "hidden", width: "100%" }}>
+        <Box sx={{ pt: 2, width: "100%" }}>
           {activeTab === 0 && (
-            <Box sx={{ width: "100%", minHeight: "50vh", mt: 1.5 }}>
+            <Box sx={{ width: "100%", minHeight: "50vh" }}>
               <CategoryBreakdownChart
                 categoryBreakdown={categoryBreakdown}
                 totalBreakdownAmount={totalBreakdownAmount}
@@ -140,7 +171,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({
           )}
 
           {activeTab === 1 && (
-            <Box sx={{ width: "100%", mt: 1.5 }}>
+            <Box sx={{ width: "100%" }}>
               <TemporalVolumesChart
                 periodicData={periodicData}
                 groupBy={groupBy}
@@ -149,7 +180,7 @@ export const StatsTab: React.FC<StatsTabProps> = ({
           )}
 
           {activeTab === 2 && (
-            <Box sx={{ width: "100%", mt: 1.5 }}>
+            <Box sx={{ width: "100%" }}>
               <TimelineChart
                 timelineData={timelineData}
                 lineYAxis={lineYAxis}
@@ -165,3 +196,5 @@ export const StatsTab: React.FC<StatsTabProps> = ({
     </Box>
   );
 };
+
+export default StatsTab;

@@ -1,85 +1,155 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-const STORAGE_KEYS = {
+export interface AppSettings {
+  /** Default ISO currency code (e.g., 'INR', 'USD') */
+  defaultCurrency: string;
+  /** Active theme preference */
+  themeMode: ThemeMode;
+  /** Display username */
+  username: string;
+}
+
+export interface UseSettingsReturn extends AppSettings {
+  /** Update the default currency and sync state globally */
+  updateDefaultCurrency: (currency: string) => void;
+  /** Update the theme mode and sync state globally */
+  updateThemeMode: (mode: ThemeMode) => void;
+  /** Update the username and sync state globally */
+  updateUsername: (newName: string) => void;
+  /** Reset all settings back to default values */
+  resetSettings: () => void;
+}
+
+export const STORAGE_KEYS = {
   CURRENCY: 'app_default_currency',
   THEME: 'app_theme_mode',
   USERNAME: 'app_username',
 } as const;
 
-export const useSettings = () => {
-  // 1. Currency State
-  const [defaultCurrency, setDefaultCurrency] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(STORAGE_KEYS.CURRENCY) || 'INR';
-    }
-    return 'INR';
-  });
+export const DEFAULT_SETTINGS: AppSettings = {
+  defaultCurrency: 'INR',
+  themeMode: 'system',
+  username: 'User',
+};
 
-  // 2. Theme State
+const EVENT_CUSTOM_SETTINGS_UPDATE = 'app_settings_updated';
+
+/* ==========================================================
+   SAFE STORAGE HELPERS (SSR & PRIVATE BROWSING SAFE)
+   ========================================================== */
+
+const safeGetItem = (key: string, fallback: string): string => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch (error) {
+    console.warn(`[useSettings] Failed to read key "${key}" from localStorage:`, error);
+    return fallback;
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+    window.dispatchEvent(new Event(EVENT_CUSTOM_SETTINGS_UPDATE));
+  } catch (error) {
+    console.warn(`[useSettings] Failed to write key "${key}" to localStorage:`, error);
+  }
+};
+
+const isThemeMode = (value: string): value is ThemeMode => {
+  return ['light', 'dark', 'system'].includes(value);
+};
+
+/* ==========================================================
+   HOOK IMPLEMENTATION
+   ========================================================== */
+
+/**
+ * Custom hook for managing application settings with reactive local storage sync,
+ * automatic dark mode DOM updates, and multi-tab state management.
+ */
+export const useSettings = (): UseSettingsReturn => {
+  const [defaultCurrency, setDefaultCurrency] = useState<string>(() =>
+    safeGetItem(STORAGE_KEYS.CURRENCY, DEFAULT_SETTINGS.defaultCurrency)
+  );
+
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem(STORAGE_KEYS.THEME) as ThemeMode) || 'system';
-    }
-    return 'system';
+    const rawTheme = safeGetItem(STORAGE_KEYS.THEME, DEFAULT_SETTINGS.themeMode);
+    return isThemeMode(rawTheme) ? rawTheme : DEFAULT_SETTINGS.themeMode;
   });
 
-  // 3. Username State
-  const [username, setUsername] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(STORAGE_KEYS.USERNAME) || 'User';
-    }
-    return 'User';
-  });
+  const [username, setUsername] = useState<string>(() =>
+    safeGetItem(STORAGE_KEYS.USERNAME, DEFAULT_SETTINGS.username)
+  );
 
-  // Setter functions with immediate persistence and custom event dispatching
-  const updateDefaultCurrency = (currency: string) => {
-    const upperCurrency = currency.toUpperCase();
-    setDefaultCurrency(upperCurrency);
-    localStorage.setItem(STORAGE_KEYS.CURRENCY, upperCurrency);
-    window.dispatchEvent(new Event('app_settings_updated'));
-  };
+  /* ==========================================================
+     SETTERS (MEMOIZED WITH USECALLBACK)
+     ========================================================== */
 
-  const updateThemeMode = (mode: ThemeMode) => {
+  const updateDefaultCurrency = useCallback((currency: string) => {
+    const formatted = currency.trim().toUpperCase() || DEFAULT_SETTINGS.defaultCurrency;
+    setDefaultCurrency(formatted);
+    safeSetItem(STORAGE_KEYS.CURRENCY, formatted);
+  }, []);
+
+  const updateThemeMode = useCallback((mode: ThemeMode) => {
     setThemeMode(mode);
-    localStorage.setItem(STORAGE_KEYS.THEME, mode);
-    window.dispatchEvent(new Event('app_settings_updated'));
-  };
+    safeSetItem(STORAGE_KEYS.THEME, mode);
+  }, []);
 
-  const updateUsername = (newName: string) => {
-    setUsername(newName);
-    localStorage.setItem(STORAGE_KEYS.USERNAME, newName);
-    window.dispatchEvent(new Event('app_settings_updated'));
-  };
+  const updateUsername = useCallback((newName: string) => {
+    const formatted = newName.trim() || DEFAULT_SETTINGS.username;
+    setUsername(formatted);
+    safeSetItem(STORAGE_KEYS.USERNAME, formatted);
+  }, []);
 
-  // Sync state changes across all components and tabs instantaneously
+  const resetSettings = useCallback(() => {
+    updateDefaultCurrency(DEFAULT_SETTINGS.defaultCurrency);
+    updateThemeMode(DEFAULT_SETTINGS.themeMode);
+    updateUsername(DEFAULT_SETTINGS.username);
+  }, [updateDefaultCurrency, updateThemeMode, updateUsername]);
+
+  /* ==========================================================
+     EVENT SYNCHRONIZATION (SAME-TAB & CROSS-TAB)
+     ========================================================== */
+
   useEffect(() => {
-    const handleSync = () => {
-      if (typeof window !== 'undefined') {
-        const storedCurrency = localStorage.getItem(STORAGE_KEYS.CURRENCY);
-        const storedTheme = localStorage.getItem(STORAGE_KEYS.THEME) as ThemeMode;
-        const storedUsername = localStorage.getItem(STORAGE_KEYS.USERNAME);
+    if (typeof window === 'undefined') return;
 
-        if (storedCurrency) setDefaultCurrency(storedCurrency);
-        if (storedTheme) setThemeMode(storedTheme);
-        if (storedUsername !== null) setUsername(storedUsername);
-      }
+    const syncSettingsFromStorage = () => {
+      const storedCurrency = safeGetItem(STORAGE_KEYS.CURRENCY, DEFAULT_SETTINGS.defaultCurrency);
+      const rawTheme = safeGetItem(STORAGE_KEYS.THEME, DEFAULT_SETTINGS.themeMode);
+      const storedTheme = isThemeMode(rawTheme) ? rawTheme : DEFAULT_SETTINGS.themeMode;
+      const storedUsername = safeGetItem(STORAGE_KEYS.USERNAME, DEFAULT_SETTINGS.username);
+
+      setDefaultCurrency(storedCurrency);
+      setThemeMode(storedTheme);
+      setUsername(storedUsername);
     };
 
-    window.addEventListener('app_settings_updated', handleSync);
-    window.addEventListener('storage', handleSync);
+    window.addEventListener(EVENT_CUSTOM_SETTINGS_UPDATE, syncSettingsFromStorage);
+    window.addEventListener('storage', syncSettingsFromStorage);
 
     return () => {
-      window.removeEventListener('app_settings_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
+      window.removeEventListener(EVENT_CUSTOM_SETTINGS_UPDATE, syncSettingsFromStorage);
+      window.removeEventListener('storage', syncSettingsFromStorage);
     };
   }, []);
 
-  // Theme application logic
+  /* ==========================================================
+     AUTOMATIC THEME APPLICATION & DOM MANAGEMENT
+     ========================================================== */
+
   useEffect(() => {
-    const applyTheme = () => {
-      const root = window.document.documentElement;
+    if (typeof window === 'undefined') return;
+
+    const root = document.documentElement;
+
+    const applyTheme = (isDarkSystem: boolean) => {
       root.classList.remove('light', 'dark');
 
       if (themeMode === 'dark') {
@@ -87,19 +157,24 @@ export const useSettings = () => {
       } else if (themeMode === 'light') {
         root.classList.add('light');
       } else {
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        root.classList.add(isDark ? 'dark' : 'light');
+        root.classList.add(isDarkSystem ? 'dark' : 'light');
       }
     };
 
-    applyTheme();
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    applyTheme(mediaQuery.matches);
 
-    if (themeMode === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handler = () => applyTheme();
-      mediaQuery.addEventListener('change', handler);
-      return () => mediaQuery.removeEventListener('change', handler);
-    }
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      if (themeMode === 'system') {
+        applyTheme(event.matches);
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleSystemThemeChange);
+    };
   }, [themeMode]);
 
   return {
@@ -109,5 +184,6 @@ export const useSettings = () => {
     updateThemeMode,
     username,
     updateUsername,
+    resetSettings,
   };
 };
