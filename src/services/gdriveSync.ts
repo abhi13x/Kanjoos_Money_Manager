@@ -1,5 +1,5 @@
 import { db, type Account, type Category, type Transaction } from '../db/schema';
-import type { TokenClient } from '../types/google'; // Import types from your declaration file
+import type { TokenClient } from '../types/google';
 
 export type ConflictResolutionStrategy = 'merge-by-id' | 'local-wins' | 'remote-wins';
 
@@ -8,6 +8,7 @@ export interface GDriveSyncConfig {
   expiryKey?: string;
   connectedKey?: string;
   lastSyncKey?: string;
+  deletedKey?: string;
   scopes?: string;
   defaultFolders?: string[];
   autoSyncIntervalMs?: number;
@@ -40,6 +41,7 @@ export class GDriveSyncService {
   private expiryKey = 'kanjoos_gdrive_expiry';
   private connectedKey = 'kanjoos_gdrive_connected';
   private lastSyncKey = 'kanjoos_gdrive_last_sync';
+  private deletedKey = 'kanjoos_gdrive_deleted_ids';
   private scopes = 'https://www.googleapis.com/auth/drive.appdata';
   private defaultFolders = ['Backups', 'Exports'];
   private autoSyncIntervalMs = DEFAULT_AUTO_SYNC_INTERVAL_MS;
@@ -51,7 +53,7 @@ export class GDriveSyncService {
   private lastError: string | null = null;
   private listeners: Set<(status: SyncStatus) => void> = new Set();
 
-  private constructor() { }
+  private constructor() {}
 
   public static getInstance(config?: GDriveSyncConfig): GDriveSyncService {
     if (!GDriveSyncService.instance) {
@@ -68,6 +70,7 @@ export class GDriveSyncService {
     if (config.expiryKey) this.expiryKey = config.expiryKey;
     if (config.connectedKey) this.connectedKey = config.connectedKey;
     if (config.lastSyncKey) this.lastSyncKey = config.lastSyncKey;
+    if (config.deletedKey) this.deletedKey = config.deletedKey;
     if (config.scopes) this.scopes = config.scopes;
     if (config.defaultFolders) this.defaultFolders = config.defaultFolders;
     if (config.autoSyncIntervalMs !== undefined) this.autoSyncIntervalMs = config.autoSyncIntervalMs;
@@ -77,6 +80,29 @@ export class GDriveSyncService {
 
   private escapeQuery(str: string): string {
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
+  /* ==========================================================
+     DELETED ITEM TOMBSTONE TRACKING
+     ========================================================== */
+
+  public markAsDeleted(id: string): void {
+    try {
+      const deleted = this.getDeletedIds();
+      deleted.add(id);
+      localStorage.setItem(this.deletedKey, JSON.stringify(Array.from(deleted)));
+    } catch (e) {
+      console.warn('Failed to record deleted ID locally:', e);
+    }
+  }
+
+  public getDeletedIds(): Set<string> {
+    try {
+      const raw = localStorage.getItem(this.deletedKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
   }
 
   /* ==========================================================
@@ -366,6 +392,7 @@ export class GDriveSyncService {
     localStorage.removeItem(this.expiryKey);
     localStorage.removeItem(this.connectedKey);
     localStorage.removeItem(this.lastSyncKey);
+    localStorage.removeItem(this.deletedKey);
     this.notifyStatus();
   }
 
@@ -472,7 +499,13 @@ export class GDriveSyncService {
           accounts?: Account[];
           transactions?: Transaction[];
           categories?: Category[];
+          deletedIds?: string[];
         }>(activeToken, latestRemoteFile.id);
+
+        // Merge remote deleted IDs into local tombstone state
+        if (remoteData.deletedIds && Array.isArray(remoteData.deletedIds)) {
+          remoteData.deletedIds.forEach((id) => this.markAsDeleted(id));
+        }
 
         const localAccounts = await db.accounts.toArray();
         const localTransactions = await db.transactions.toArray();
@@ -499,6 +532,7 @@ export class GDriveSyncService {
                 accounts: mergedAccounts,
                 transactions: mergedTransactions,
                 categories: mergedCategories,
+                deletedIds: Array.from(this.getDeletedIds()),
                 exportedAt: new Date().toISOString(),
               },
               null,
@@ -528,10 +562,21 @@ export class GDriveSyncService {
   ): T[] {
     const map = new Map<string, T>();
     const getItemTimestamp = (item: T): number => item.updatedAt ?? 0;
+    const deletedIds = this.getDeletedIds();
 
-    localList.forEach((item) => map.set(item.id, item));
+    // 1. Populate local items, excluding any locally deleted items
+    localList.forEach((item) => {
+      if (!deletedIds.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
 
+    // 2. Merge remote items, ignoring any item that has been marked deleted
     remoteList.forEach((remoteItem) => {
+      if (deletedIds.has(remoteItem.id)) {
+        return; // Prevent resurrecting deleted records
+      }
+
       const localItem = map.get(remoteItem.id);
       if (!localItem || getItemTimestamp(remoteItem) > getItemTimestamp(localItem)) {
         map.set(remoteItem.id, remoteItem);
@@ -556,6 +601,7 @@ export class GDriveSyncService {
       accounts: await db.accounts.toArray(),
       transactions: await db.transactions.toArray(),
       categories: await db.categories.toArray(),
+      deletedIds: Array.from(this.getDeletedIds()),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -563,6 +609,10 @@ export class GDriveSyncService {
     await this.createFile(activeToken, blob, fileName, backupFolderId);
     await this.pruneOldBackups(activeToken, backupFolderId);
     return fileName;
+  }
+
+  public async exportToGDrive(token?: string): Promise<string> {
+    return this.exportBackupToDrive(token);
   }
 
   async importBackupFromDrive(token?: string, customFileName?: string): Promise<void> {
@@ -582,7 +632,12 @@ export class GDriveSyncService {
       accounts?: Account[];
       transactions?: Transaction[];
       categories?: Category[];
+      deletedIds?: string[];
     }>(activeToken, fileToImport.id);
+
+    if (data.deletedIds && Array.isArray(data.deletedIds)) {
+      data.deletedIds.forEach((id) => this.markAsDeleted(id));
+    }
 
     await db.transaction('rw', [db.accounts, db.transactions, db.categories], async () => {
       await db.accounts.clear();
@@ -595,3 +650,16 @@ export class GDriveSyncService {
     });
   }
 }
+
+/* ==========================================================
+   EXPORTED HELPER FUNCTIONS
+   ========================================================== */
+
+export const exportBackupToGDrive = async (): Promise<string> => {
+  const syncService = GDriveSyncService.getInstance();
+  return await syncService.exportBackupToDrive();
+};
+
+export const recordDeletedTransactionId = (id: string): void => {
+  GDriveSyncService.getInstance().markAsDeleted(id);
+};
