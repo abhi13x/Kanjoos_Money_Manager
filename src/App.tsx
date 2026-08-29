@@ -1,3 +1,4 @@
+// App.tsx
 import { useState, useEffect } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import Dashboard from './components/Dashboard';
@@ -45,7 +46,10 @@ function App() {
     };
 
     window.addEventListener('open-edit-modal', handleEditModal);
-    return () => window.removeEventListener('open-edit-modal', handleEditModal);
+    return () => {
+      window.removeEventListener('open-edit-modal', handleEditModal);
+      syncService.stopAutoSync(); // Clean up auto-sync timers on unmount
+    };
   }, []);
 
   return (
