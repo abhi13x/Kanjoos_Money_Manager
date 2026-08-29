@@ -35,6 +35,7 @@ export const EditCategoryModal: React.FC<EditCategoryModalProps> = ({
 
     await db.categories.update(category.id, {
       name: name.trim(),
+      updatedAt: Date.now(), // ✅ added
     });
 
     onClose();

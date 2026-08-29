@@ -28,7 +28,7 @@ export interface GDriveFile {
   createdTime?: string;
 }
 
-const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes buffer
 const DEFAULT_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_BACKUPS = 10;
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
@@ -78,14 +78,12 @@ export class GDriveSyncService {
     if (config.conflictStrategy) this.conflictStrategy = config.conflictStrategy;
   }
 
+  // ─── Helpers ────────────────────────────────────────────────
   private escapeQuery(str: string): string {
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   }
 
-  /* ==========================================================
-     DELETED ITEM TOMBSTONE TRACKING
-     ========================================================== */
-
+  // ─── Tombstone Management ──────────────────────────────────
   public markAsDeleted(id: string): void {
     try {
       const deleted = this.getDeletedIds();
@@ -105,10 +103,7 @@ export class GDriveSyncService {
     }
   }
 
-  /* ==========================================================
-     REST CLIENT HELPER
-     ========================================================== */
-
+  // ─── REST Client ────────────────────────────────────────────
   private async driveFetch<T = unknown>(
     url: string,
     token: string,
@@ -123,7 +118,9 @@ export class GDriveSyncService {
     });
 
     if (response.status === 401) {
-      throw new Error('Authentication failed or token expired.');
+      // Clear invalid token
+      this.clearSession();
+      throw new Error('Authentication failed or token expired. Please reconnect.');
     }
 
     if (response.status === 403) {
@@ -144,10 +141,7 @@ export class GDriveSyncService {
     return response.json() as Promise<T>;
   }
 
-  /* ==========================================================
-     STATUS & EVENT LISTENERS
-     ========================================================== */
-
+  // ─── Status & Subscriptions ─────────────────────────────────
   public getStatus(): SyncStatus {
     const rawTime = localStorage.getItem(this.lastSyncKey);
     return {
@@ -168,10 +162,7 @@ export class GDriveSyncService {
     this.listeners.forEach((listener) => listener(status));
   }
 
-  /* ==========================================================
-     AUTOMATIC PERIODIC SYNC SCHEDULER
-     ========================================================== */
-
+  // ─── Auto-Sync Scheduler ────────────────────────────────────
   public startAutoSync(intervalMs = this.autoSyncIntervalMs): void {
     this.stopAutoSync();
     this.autoSyncIntervalMs = intervalMs;
@@ -209,10 +200,7 @@ export class GDriveSyncService {
     }
   };
 
-  /* ==========================================================
-     TIMESTAMP FILENAME GENERATOR
-     ========================================================== */
-
+  // ─── Backup File Name Generator ─────────────────────────────
   public generateBackupFileName(): string {
     const now = new Date();
     const pad = (num: number, len = 2) => String(num).padStart(len, '0');
@@ -228,10 +216,7 @@ export class GDriveSyncService {
     return `BKP_${DD}${MM}${YY}_${HH}${mm}${ss}_${fff}.json`;
   }
 
-  /* ==========================================================
-     AUTOMATIC FOLDER CREATION & PRUNING
-     ========================================================== */
-
+  // ─── Folder Management ──────────────────────────────────────
   async getOrCreateFolder(token: string | null, folderName: string): Promise<string> {
     const activeToken = await this.ensureValidToken(token);
     const safeName = this.escapeQuery(folderName);
@@ -299,10 +284,7 @@ export class GDriveSyncService {
     }
   }
 
-  /* ==========================================================
-     TOKEN & SESSION MANAGEMENT
-     ========================================================== */
-
+  // ─── Token & Session Management ────────────────────────────
   async ensureValidToken(token?: string | null): Promise<string> {
     const activeToken = token || (await this.getValidToken());
     if (!activeToken) {
@@ -311,8 +293,12 @@ export class GDriveSyncService {
     return activeToken;
   }
 
+  /**
+   * Returns true only if we have a **valid** (non‑expired) token.
+   * This prevents false "connected" state after the token expires.
+   */
   hasCachedSession(): boolean {
-    return localStorage.getItem(this.connectedKey) === 'true' || this.hasValidAccessToken();
+    return this.hasValidAccessToken();
   }
 
   hasValidAccessToken(): boolean {
@@ -322,6 +308,7 @@ export class GDriveSyncService {
   }
 
   async authenticate(): Promise<string | null> {
+    // Force a fresh token, even if a cached one exists (user explicitly wants to reconnect)
     return this.requestAuth('select_account');
   }
 
@@ -341,40 +328,50 @@ export class GDriveSyncService {
     return new Promise((resolve, reject) => {
       try {
         if (!window.google?.accounts?.oauth2) {
-          throw new Error('Google Identity Services SDK not loaded.');
+          reject(new Error('Google Identity Services SDK not loaded.'));
+          return;
         }
 
         const client_id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
         if (!client_id) {
-          throw new Error('Google Client ID is missing in environment variables.');
+          reject(new Error('Google Client ID is missing in environment variables.'));
+          return;
         }
 
         const client: TokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id,
           scope: this.scopes,
-          callback: async (response) => {
+          callback: (response) => {
             if (response.error) {
-              if (prompt === '') {
-                resolve(this.requestAuth('select_account'));
-              } else {
-                reject(new Error(typeof response.error === 'string' ? response.error : 'Auth failed'));
-              }
-            } else if (response.access_token) {
-              const expiresInMs = (Number(response.expires_in) || 3600) * 1000;
-              const expiresAt = Date.now() + expiresInMs;
+              // If user cancels or error, reject
+              reject(new Error(typeof response.error === 'string' ? response.error : 'Authentication failed.'));
+              return;
+            }
 
+            if (!response.access_token) {
+              reject(new Error('No access token received.'));
+              return;
+            }
+
+            const expiresInMs = (Number(response.expires_in) || 3600) * 1000;
+            const expiresAt = Date.now() + expiresInMs;
+
+            try {
               localStorage.setItem(this.tokenKey, response.access_token);
               localStorage.setItem(this.expiryKey, expiresAt.toString());
               localStorage.setItem(this.connectedKey, 'true');
-
-              resolve(response.access_token);
-
-              this.ensureAppFolders(response.access_token).catch((err) =>
-                console.warn('Background folder creation failed:', err)
-              );
-
-              this.startAutoSync();
+            } catch (e) {
+              reject(new Error('Failed to store authentication token.'));
+              return;
             }
+
+            // Start auto-sync and create folders in background
+            this.startAutoSync();
+            this.ensureAppFolders(response.access_token).catch((err) =>
+              console.warn('Background folder creation failed:', err)
+            );
+
+            resolve(response.access_token);
           },
         });
 
@@ -396,10 +393,7 @@ export class GDriveSyncService {
     this.notifyStatus();
   }
 
-  /* ==========================================================
-     CRUD & QUERY OPERATIONS
-     ========================================================== */
-
+  // ─── File Operations ────────────────────────────────────────
   async findBackupFile(
     token: string,
     fileName: string,
@@ -472,10 +466,7 @@ export class GDriveSyncService {
     return response.json() as Promise<T>;
   }
 
-  /* ==========================================================
-     CONFLICT RESOLUTION & SYNC ENGINE
-     ========================================================== */
-
+  // ─── Sync Engine ────────────────────────────────────────────
   async sync(strategy = this.conflictStrategy): Promise<void> {
     if (this.isSyncing) return;
 
@@ -495,6 +486,7 @@ export class GDriveSyncService {
       } else if (strategy === 'remote-wins') {
         await this.importBackupFromDrive(activeToken, latestRemoteFile.name);
       } else {
+        // Merge strategy
         const remoteData = await this.readFile<{
           accounts?: Account[];
           transactions?: Transaction[];
@@ -525,6 +517,7 @@ export class GDriveSyncService {
           if (mergedCategories.length) await db.categories.bulkPut(mergedCategories);
         });
 
+        // Upload merged backup
         const mergedBlob = new Blob(
           [
             JSON.stringify(
@@ -564,17 +557,17 @@ export class GDriveSyncService {
     const getItemTimestamp = (item: T): number => item.updatedAt ?? 0;
     const deletedIds = this.getDeletedIds();
 
-    // 1. Populate local items, excluding any locally deleted items
+    // 1. Populate local items, excluding deleted
     localList.forEach((item) => {
       if (!deletedIds.has(item.id)) {
         map.set(item.id, item);
       }
     });
 
-    // 2. Merge remote items, ignoring any item that has been marked deleted
+    // 2. Merge remote items (skip deleted)
     remoteList.forEach((remoteItem) => {
       if (deletedIds.has(remoteItem.id)) {
-        return; // Prevent resurrecting deleted records
+        return;
       }
 
       const localItem = map.get(remoteItem.id);
@@ -586,10 +579,7 @@ export class GDriveSyncService {
     return Array.from(map.values());
   }
 
-  /* ==========================================================
-     BACKUP & RESTORE WORKFLOWS
-     ========================================================== */
-
+  // ─── Backup & Restore ───────────────────────────────────────
   async exportBackupToDrive(token?: string, customFileName?: string): Promise<string> {
     const activeToken = await this.ensureValidToken(token);
     const folders = await this.ensureAppFolders(activeToken);
@@ -651,10 +641,7 @@ export class GDriveSyncService {
   }
 }
 
-/* ==========================================================
-   EXPORTED HELPER FUNCTIONS
-   ========================================================== */
-
+// ─── Exported Helpers ─────────────────────────────────────────
 export const exportBackupToGDrive = async (): Promise<string> => {
   const syncService = GDriveSyncService.getInstance();
   return await syncService.exportBackupToDrive();

@@ -20,13 +20,14 @@ export type CategoryType = 'income' | 'expense';
 export type BudgetPeriod = 'monthly' | 'yearly';
 
 export interface Account {
-  id: string; // UUID
+  id: string;
   name: string;
   type: AccountType;
-  currency: string; // e.g., 'INR', 'USD', 'EUR'
-  initialBalance: number; // In cents/paise
-  currentBalance: number; // Tracked balance for performance
-  createdAt: number; // Timestamp
+  currency: string;
+  initialBalance: number;
+  currentBalance: number;
+  createdAt: number;
+  updatedAt: number;                     // ✅ ensure this is present
 
   // Investment metadata fields
   investmentSubType?: InvestmentSubType;
@@ -36,36 +37,41 @@ export interface Account {
   tenureMonths?: number;
   startDate?: number;
   compoundingFrequency?: CompoundingFrequency;
+  repeatInvestmentDate?: number;
+  statementDate?: number;
+  dueDate?: number;
 }
 
 export interface Transaction {
-  id: string; // UUID
-  accountId: string; // UUID
-  amount: number; // In cents/paise
+  id: string;
+  accountId: string;
+  amount: number;
   type: TransactionType;
   category: string;
   note?: string;
-  date: number; // Timestamp
+  date: number;
   toAccountId?: string;
+  updatedAt: number;                     // ✅ ensure this is present
 }
 
 export interface Category {
   id: string;
   name: string;
   type: CategoryType;
-  icon: string; // Lucide icon name
-  color: string; // Hex or Tailwind color class
+  icon: string;
+  color: string;
   parentId?: string;
+  updatedAt: number;                     // ✅ ensure this is present
 }
 
 export interface Budget {
   id: string;
   categoryId: string;
-  amountLimit: number; // In cents/paise
+  amountLimit: number;
   period: BudgetPeriod;
 }
 
-/** ISO currency codes that do not use fractional sub-units */
+/** ISO currency codes that do not use fractional sub‑units */
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'VND', 'CLP', 'PYG']);
 
 /** Converts floating point input (e.g., 12.50) to integer cents (1250) */
@@ -98,10 +104,8 @@ const getFallbackLocale = (currency: string): string => {
   return localeMap[code] || 'en-US';
 };
 
-/** Singleton instance cache to avoid heavy re-instantiation of Intl.NumberFormat */
 const formatterCache = new Map<string, Intl.NumberFormat>();
 
-/** Formats a cents/paise value dynamically based on currency code */
 export const formatCurrency = (cents: number, currency = 'INR', locale?: string): string => {
   const upperCurrency = currency.toUpperCase();
   const targetLocale = locale || getFallbackLocale(upperCurrency);
