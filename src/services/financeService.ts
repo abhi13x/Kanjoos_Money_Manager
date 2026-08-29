@@ -52,20 +52,29 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
   });
 };
 
-const triggerBackgroundSync = async (): Promise<void> => {
+/**
+ * Triggers an outbound sync push after local mutations to prevent remote pulls
+ * from overwriting newly deleted/updated data.
+ */
+const triggerOutboundSync = async (): Promise<void> => {
   try {
     const syncService = GDriveSyncService.getInstance();
     if (syncService.hasCachedSession()) {
-      syncService.sync().catch(err => console.warn('Background sync failed:', err));
+      // Export local state directly to prevent stale remote state from being pulled
+      if ('exportToGDrive' in syncService && typeof syncService.exportToGDrive === 'function') {
+        await (syncService as any).exportToGDrive();
+      } else {
+        await syncService.sync();
+      }
     }
   } catch (e) {
-    console.error('Error triggering background sync:', e);
+    console.warn('Background sync failed:', e);
   }
 };
 
 export const addTransactionWithSync = async (transactionData: Omit<Transaction, 'id'>): Promise<Transaction> => {
   const tx = await addTransaction(transactionData);
-  triggerBackgroundSync();
+  triggerOutboundSync();
   return tx;
 };
 
@@ -90,7 +99,7 @@ export const updateTransaction = async (id: string, updateData: Partial<Transact
 
 export const updateTransactionWithSync = async (id: string, transactionData: Partial<Transaction>): Promise<Transaction> => {
   const updatedTx = await updateTransaction(id, transactionData);
-  triggerBackgroundSync();
+  triggerOutboundSync();
   return updatedTx;
 };
 
@@ -105,8 +114,11 @@ export const deleteTransaction = async (id: string): Promise<void> => {
 };
 
 export const deleteTransactionWithSync = async (id: string): Promise<void> => {
+  // 1. Await database deletion and account balance adjustment
   await deleteTransaction(id);
-  triggerBackgroundSync();
+
+  // 2. Push updated state immediately
+  await triggerOutboundSync();
 };
 
 export const getAccountBalances = async () => {
