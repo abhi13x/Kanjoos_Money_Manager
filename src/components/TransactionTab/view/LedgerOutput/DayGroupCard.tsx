@@ -1,45 +1,57 @@
 import React, { memo, useState, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { Trash2, TrendingUp, TrendingDown, Scale } from 'lucide-react';
-import type { Transaction, Account, Category } from '@/db/schema';
+import { Trash2, TrendingUp, TrendingDown } from 'lucide-react';
+import type { Transaction, Account } from '@/db/schema';
 
-export type ViewMode = 'daily' | 'monthly' | 'yearly';
-
-export interface PeriodTotals {
-  income: number;
-  expense: number;
-  net: number;
-}
-
-export interface TransactionHeaderProps {
-  title: string;
-  totals?: PeriodTotals;
-  format: (v: number) => string;
-}
-
-export interface TransactionRowProps {
-  tx?: Transaction;
-  accounts?: Account[];
-  categories?: Category[];
-  getCategoryName?: (tx: Transaction) => string;
-  format: (v: number) => string;
-  onDelete?: () => void;
-  onEdit?: () => void;
-  viewMode?: ViewMode;
-  periodLabel?: string;
-  totals?: PeriodTotals;
-  isLast?: boolean;
-}
-
-// iOS Native System Palette
+// Native iOS System Colors
 const IOS_COLORS = {
-  income: '#34C759', // Green
-  expense: '#FF3B30', // Red
-  accent: '#007AFF', // Blue
+  blue: '#007AFF',
+  red: '#FF3B30',
+  green: '#34C759',
 };
 
 const DELETE_ACTION_WIDTH = 76;
+
+export interface CategoryItem {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  [key: string]: any;
+}
+
+export interface DayGroupProps {
+  groupTitle: string;
+  totalIncome: number;
+  totalExpense: number;
+  netCents: number;
+  transactions: Transaction[];
+  accounts?: Account[];
+  categories?: CategoryItem[];
+  format?: (cents: number) => string;
+  getCategoryName?: (tx: Transaction) => string;
+  onDeleteTx?: (id: string) => void;
+  onEditTx?: (tx: Transaction) => void;
+}
+
+const defaultFormat = (cents: number): string => {
+  const amount = cents / 100;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(Math.abs(amount));
+};
+
+const parseGroupTitle = (title: string) => {
+  const cleanTitle = title.trim();
+  const match = cleanTitle.match(/^(\d{1,2})\s+([A-Za-z]+)$/);
+
+  if (match) {
+    return { dayNum: match[1].padStart(2, '0'), dayLabel: match[2] };
+  }
+  return { dayNum: null, dayLabel: cleanTitle };
+};
 
 const parseCategories = (tx: Transaction, fallbackCategoryName: string) => {
   if (tx.type === 'transfer') {
@@ -99,130 +111,27 @@ const formatAccountLabel = (tx: Transaction, account?: Account, toAccount?: Acco
 };
 
 /**
- * Rounded Date Header Box
+ * Single Transaction Row
  */
-export const TransactionHeader: React.FC<TransactionHeaderProps> = memo(({ title, totals, format }) => {
-  if (!totals) return null;
-
-  const isNetPositive = totals.net >= 0;
-
-  return (
-    <Box
-      sx={{
-        p: 2,
-        mt: 2,
-        mb: 1.25,
-        borderRadius: '16px', // Rounded Header Card Box
-        bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: (t) => alpha(t.palette.divider, 0.18),
-        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.12)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Top Line: Date Header */}
-      <Typography
-        sx={{
-          fontWeight: 700,
-          fontSize: '1rem',
-          color: 'text.primary',
-          letterSpacing: '-0.01em',
-          mb: 1.25,
-        }}
-      >
-        {title}
-      </Typography>
-
-      {/* Bottom Line: Totals Bar */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
-          {/* Income Total */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-            <TrendingUp size={15} color={IOS_COLORS.accent} />
-            <Typography
-              sx={{
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: IOS_COLORS.accent,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              +{format(totals.income)}
-            </Typography>
-          </Box>
-
-          {/* Expense Total */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-            <TrendingDown size={15} color={IOS_COLORS.expense} />
-            <Typography
-              sx={{
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: IOS_COLORS.expense,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              -{format(Math.abs(totals.expense))}
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Net Total Badge Pill */}
-        <Box
-          sx={{
-            px: 1.25,
-            py: 0.4,
-            borderRadius: '8px',
-            bgcolor: (t) =>
-              alpha(
-                isNetPositive ? IOS_COLORS.accent : IOS_COLORS.expense,
-                0.18
-              ),
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              color: isNetPositive ? IOS_COLORS.accent : IOS_COLORS.expense,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {isNetPositive ? '+' : ''}
-            {format(totals.net)}
-          </Typography>
-        </Box>
-      </Box>
-    </Box>
-  );
-});
-
-TransactionHeader.displayName = 'TransactionHeader';
-
-/**
- * Strictly Aligned iOS Transaction Row
- */
-export const TransactionRow: React.FC<TransactionRowProps> = memo(({
+const TransactionRowItem = memo(({
   tx,
   accounts = [],
   getCategoryName,
-  format,
+  format = defaultFormat,
   onDelete,
   onEdit,
-  viewMode = 'daily',
-  periodLabel,
-  totals,
   isLast = false,
+}: {
+  tx: Transaction;
+  accounts?: Account[];
+  getCategoryName?: (tx: Transaction) => string;
+  format?: (cents: number) => string;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  isLast?: boolean;
 }) => {
   const theme = useTheme();
 
-  // Touch Swipe State
   const [translateX, setTranslateX] = useState<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const touchStartXRef = useRef<number | null>(null);
@@ -269,136 +178,6 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
     onEdit?.();
   };
 
-  // Period Summary View (Monthly / Yearly)
-  if ((viewMode === 'monthly' || viewMode === 'yearly') && totals) {
-    const isNetPositive = totals.net >= 0;
-
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.25,
-          p: 2,
-          borderRadius: '16px',
-          bgcolor: 'background.paper',
-          border: '1px solid',
-          borderColor: (t) => alpha(t.palette.divider, 0.3),
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 600,
-            fontSize: '0.9375rem',
-            color: 'text.primary',
-            pb: 0.75,
-            borderBottom: '1px solid',
-            borderColor: (t) => alpha(t.palette.divider, 0.3),
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {periodLabel || 'Period Summary'}
-        </Typography>
-
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            py: 1,
-            px: 1.5,
-            borderRadius: '10px',
-            bgcolor: alpha(IOS_COLORS.income, 0.08),
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TrendingUp size={18} color={IOS_COLORS.income} />
-            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
-              Income
-            </Typography>
-          </Box>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 600,
-              color: IOS_COLORS.income,
-              fontSize: '0.9375rem',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            + {format(Math.abs(totals.income))}
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            py: 1,
-            px: 1.5,
-            borderRadius: '10px',
-            bgcolor: alpha(IOS_COLORS.expense, 0.08),
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TrendingDown size={18} color={IOS_COLORS.expense} />
-            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
-              Expense
-            </Typography>
-          </Box>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 600,
-              color: IOS_COLORS.expense,
-              fontSize: '0.9375rem',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            - {format(Math.abs(totals.expense))}
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            py: 1,
-            px: 1.5,
-            borderRadius: '10px',
-            bgcolor: alpha(isNetPositive ? IOS_COLORS.income : IOS_COLORS.expense, 0.08),
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Scale
-              size={18}
-              color={isNetPositive ? IOS_COLORS.income : IOS_COLORS.expense}
-            />
-            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>
-              Net
-            </Typography>
-          </Box>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 600,
-              color: isNetPositive ? IOS_COLORS.income : IOS_COLORS.expense,
-              fontSize: '0.9375rem',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {isNetPositive ? '+' : ''} {format(totals.net)}
-          </Typography>
-        </Box>
-      </Box>
-    );
-  }
-
-  if (!tx) return null;
-
   const account = accounts.find((a) => a.id === tx.accountId);
   const toAccount = tx.toAccountId ? accounts.find((a) => a.id === tx.toAccountId) : null;
   const categoryName = getCategoryName ? getCategoryName(tx) : 'Uncategorized';
@@ -408,9 +187,9 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
 
   const amountColor =
     tx.type === 'income'
-      ? IOS_COLORS.income
+      ? IOS_COLORS.green
       : tx.type === 'expense'
-      ? IOS_COLORS.expense
+      ? IOS_COLORS.red
       : theme.palette.text.primary;
 
   return (
@@ -430,7 +209,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
             bottom: 0,
             right: 0,
             width: DELETE_ACTION_WIDTH,
-            bgcolor: IOS_COLORS.expense,
+            bgcolor: IOS_COLORS.red,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -444,7 +223,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
         </Box>
       )}
 
-      {/* Row Foreground with Strict 3-Column Grid */}
+      {/* Row Foreground Grid */}
       <Box
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -456,7 +235,6 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
           transform: `translateX(${translateX}px)`,
           transition: isDragging ? 'none' : 'transform 0.26s cubic-bezier(0.16, 1, 0.3, 1)',
           display: 'grid',
-          // Strictly locks Column 1 to 120px, Column 2 to remaining space, Column 3 to 90px
           gridTemplateColumns: '120px 1fr 90px',
           alignItems: 'center',
           columnGap: 1.5,
@@ -485,7 +263,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
           },
         }}
       >
-        {/* Column 1: Category (Fixed Width: 120px) */}
+        {/* Column 1: Category */}
         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Typography
             noWrap
@@ -516,7 +294,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
           ) : null}
         </Box>
 
-        {/* Column 2: Note & Account (Flexible Width) */}
+        {/* Column 2: Note & Account */}
         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {tx.note ? (
             <>
@@ -561,7 +339,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
           )}
         </Box>
 
-        {/* Column 3: Amount (Fixed Width: 90px, Right Aligned) */}
+        {/* Column 3: Amount */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
           <Typography
             noWrap
@@ -582,6 +360,187 @@ export const TransactionRow: React.FC<TransactionRowProps> = memo(({
   );
 });
 
-TransactionRow.displayName = 'TransactionRow';
+/**
+ * Unified Container Box: Holds Header and all Transactions for one Day
+ */
+export const DayGroupCard: React.FC<DayGroupProps> = memo(({
+  groupTitle,
+  totalIncome,
+  totalExpense,
+  netCents,
+  transactions = [],
+  accounts = [],
+  format = defaultFormat,
+  getCategoryName,
+  onDeleteTx,
+  onEditTx,
+}) => {
+  const isNetPositive = netCents >= 0;
+  const { dayNum, dayLabel } = parseGroupTitle(groupTitle);
 
-export default TransactionRow;
+  return (
+    <Box
+      sx={{
+        mt: 2,
+        mb: 2,
+        borderRadius: '16px', // Outer iOS Rounded Container
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: (t) => alpha(t.palette.divider, 0.2),
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.08)',
+        overflow: 'hidden', // Clips child transaction swipes neatly inside corners
+      }}
+    >
+      {/* 1. Header Section */}
+      <Box
+        sx={{
+          p: 2,
+          bgcolor: (t) =>
+            t.palette.mode === 'dark'
+              ? alpha('#1E293B', 0.4)
+              : alpha('#F8FAFC', 0.8),
+          borderBottom: '1px solid',
+          borderColor: (t) => alpha(t.palette.divider, 0.25),
+        }}
+      >
+        {/* Date Title */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+          {dayNum ? (
+            <>
+              <Typography
+                sx={{
+                  fontWeight: 800,
+                  fontSize: '1.25rem',
+                  lineHeight: 1,
+                  color: 'text.primary',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {dayNum}
+              </Typography>
+              <Box
+                sx={{
+                  px: 1,
+                  py: 0.3,
+                  borderRadius: '6px',
+                  bgcolor: (t) =>
+                    t.palette.mode === 'dark'
+                      ? alpha('#9CA3AF', 0.2)
+                      : alpha('#9CA3AF', 0.15),
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: '0.75rem',
+                    lineHeight: 1,
+                    color: 'text.secondary',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {dayLabel}
+                </Typography>
+              </Box>
+            </>
+          ) : (
+            <Typography
+              sx={{
+                fontWeight: 700,
+                fontSize: '1rem',
+                color: 'text.primary',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {groupTitle}
+            </Typography>
+          )}
+        </Box>
+
+        {/* Totals Bar */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+              <TrendingUp size={15} color={IOS_COLORS.blue} />
+              <Typography
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  color: IOS_COLORS.blue,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                +{format(totalIncome)}
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+              <TrendingDown size={15} color={IOS_COLORS.red} />
+              <Typography
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  color: IOS_COLORS.red,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                -{format(totalExpense)}
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box
+            sx={{
+              px: 1.25,
+              py: 0.4,
+              borderRadius: '8px',
+              bgcolor: alpha(isNetPositive ? IOS_COLORS.blue : IOS_COLORS.red, 0.18),
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Typography
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.875rem',
+                color: isNetPositive ? IOS_COLORS.blue : IOS_COLORS.red,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {isNetPositive ? '+' : ''}
+              {format(netCents)}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* 2. Transaction Rows List */}
+      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+        {transactions.map((tx, idx) => (
+          <TransactionRowItem
+            key={tx.id || idx}
+            tx={tx}
+            accounts={accounts}
+            getCategoryName={getCategoryName}
+            format={format}
+            onDelete={onDeleteTx ? () => onDeleteTx(tx.id) : undefined}
+            onEdit={onEditTx ? () => onEditTx(tx) : undefined}
+            isLast={idx === transactions.length - 1}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+});
+
+DayGroupCard.displayName = 'DayGroupCard';
+
+export default DayGroupCard;

@@ -4,6 +4,7 @@ import {
   type InvestmentResult,
   type InvestmentSubType,
   buildProjection,
+  calculateCAGR,
   calculateEPFO,
   calculateFD,
   calculateLumpSum,
@@ -52,9 +53,12 @@ export const calculateInvestmentForDuration = (
   tenureMonths: number
 ): InvestmentResult | null => {
   const rate = getRatePercent(account);
-  if (!rate || tenureMonths <= 0) return null;
+  if (rate === undefined || tenureMonths <= 0) return null;
 
-  const { monthlyInvestment, currentBalance, initialBalance, compoundingFrequency } = account;
+  const monthlyInvestment = account.monthlyInvestment ?? 0;
+  const initialBalance = account.initialBalance ?? 0;
+  const currentBalance = account.currentBalance ?? initialBalance;
+  const { compoundingFrequency } = account;
 
   switch (subType) {
     case 'fd':
@@ -66,7 +70,7 @@ export const calculateInvestmentForDuration = (
       });
 
     case 'rd':
-      if (!monthlyInvestment) return null;
+      if (monthlyInvestment <= 0) return null;
       return calculateRD({
         monthlyDepositCents: monthlyInvestment,
         annualRatePercent: rate,
@@ -74,7 +78,7 @@ export const calculateInvestmentForDuration = (
       });
 
     case 'sip':
-      if (!monthlyInvestment) return null;
+      if (monthlyInvestment <= 0 && initialBalance <= 0) return null;
       return calculateSIP({
         monthlyInvestmentCents: monthlyInvestment,
         annualReturnPercent: rate,
@@ -90,7 +94,7 @@ export const calculateInvestmentForDuration = (
       });
 
     case 'ppf':
-      if (!monthlyInvestment) return null;
+      if (monthlyInvestment <= 0 && initialBalance <= 0) return null;
       return calculatePPF({
         monthlyDepositCents: monthlyInvestment,
         annualRatePercent: rate,
@@ -99,7 +103,7 @@ export const calculateInvestmentForDuration = (
       });
 
     case 'nps':
-      if (!monthlyInvestment) return null;
+      if (monthlyInvestment <= 0 && initialBalance <= 0) return null;
       return calculateNPS({
         monthlyInvestmentCents: monthlyInvestment,
         annualReturnPercent: rate,
@@ -108,7 +112,7 @@ export const calculateInvestmentForDuration = (
       });
 
     case 'epfo':
-      if (!monthlyInvestment) return null;
+      if (monthlyInvestment <= 0 && initialBalance <= 0) return null;
       return calculateEPFO({
         monthlyContributionCents: monthlyInvestment,
         annualRatePercent: rate,
@@ -147,14 +151,12 @@ export const projectInvestment = (
 
   const projectedValueCents = intermediateResult.maturityValueCents;
   const isLumpSumType = subType === 'fd' || subType === 'lumpsum';
+  
   const investedSoFar = isLumpSumType
-    ? account.currentBalance
+    ? (account.initialBalance ?? account.currentBalance ?? 0)
     : (account.initialBalance ?? 0) + (account.monthlyInvestment ?? 0) * elapsedMonths;
 
-  const annualizedReturnPercent =
-    investedSoFar > 0
-      ? ((projectedValueCents / investedSoFar) ** (12 / elapsedMonths) - 1) * 100
-      : 0;
+  const annualizedReturnPercent = calculateCAGR(investedSoFar, projectedValueCents, elapsedMonths);
 
   return {
     ...fullResult,
@@ -170,7 +172,7 @@ export interface InvestmentSummary {
   projection: InvestmentProjection;
 }
 
-/** Aggregate projections for all investment accounts that have sufficient metadata. */
+/** Aggregate projections for all investment accounts with sufficient metadata. */
 export const getInvestmentSummaries = (accounts: Account[]): InvestmentSummary[] =>
   accounts
     .filter((a) => isInvestmentAccount(a.type))
@@ -188,5 +190,4 @@ export const getTotalProjectedMaturity = (accounts: Account[]): number =>
 export const getTotalProjectedInterest = (accounts: Account[]): number =>
   getInvestmentSummaries(accounts).reduce((sum, s) => sum + s.projection.interestEarnedCents, 0);
 
-// Re-export formulas for direct use
 export * from './investmentFormulas';

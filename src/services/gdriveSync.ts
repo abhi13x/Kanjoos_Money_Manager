@@ -1,4 +1,5 @@
-import { db } from '../db/schema';
+import { db, type Account, type Category, type Transaction } from '../db/schema';
+import type { TokenClient } from '../types/google'; // Import types from your declaration file
 
 export type ConflictResolutionStrategy = 'merge-by-id' | 'local-wins' | 'remote-wins';
 
@@ -11,6 +12,7 @@ export interface GDriveSyncConfig {
   defaultFolders?: string[];
   autoSyncIntervalMs?: number;
   conflictStrategy?: ConflictResolutionStrategy;
+  maxBackupsToKeep?: number;
 }
 
 export interface SyncStatus {
@@ -25,31 +27,9 @@ export interface GDriveFile {
   createdTime?: string;
 }
 
-// Global augmentation for Google Identity Services SDK
-declare global {
-  interface Window {
-    google: {
-      accounts?: {
-        oauth2?: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: {
-              access_token?: string;
-              expires_in?: number;
-              error?: any;
-            }) => void;
-          }) => {
-            requestAccessToken: (options?: { prompt?: string }) => void;
-          };
-        };
-      };
-    };
-  }
-}
-
-const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5-minute safety threshold
-const DEFAULT_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+const DEFAULT_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+const DEFAULT_MAX_BACKUPS = 10;
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
 
@@ -63,6 +43,7 @@ export class GDriveSyncService {
   private scopes = 'https://www.googleapis.com/auth/drive.appdata';
   private defaultFolders = ['Backups', 'Exports'];
   private autoSyncIntervalMs = DEFAULT_AUTO_SYNC_INTERVAL_MS;
+  private maxBackupsToKeep = DEFAULT_MAX_BACKUPS;
   private conflictStrategy: ConflictResolutionStrategy = 'merge-by-id';
 
   private syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -70,7 +51,7 @@ export class GDriveSyncService {
   private lastError: string | null = null;
   private listeners: Set<(status: SyncStatus) => void> = new Set();
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(config?: GDriveSyncConfig): GDriveSyncService {
     if (!GDriveSyncService.instance) {
@@ -90,14 +71,19 @@ export class GDriveSyncService {
     if (config.scopes) this.scopes = config.scopes;
     if (config.defaultFolders) this.defaultFolders = config.defaultFolders;
     if (config.autoSyncIntervalMs !== undefined) this.autoSyncIntervalMs = config.autoSyncIntervalMs;
+    if (config.maxBackupsToKeep !== undefined) this.maxBackupsToKeep = config.maxBackupsToKeep;
     if (config.conflictStrategy) this.conflictStrategy = config.conflictStrategy;
   }
 
+  private escapeQuery(str: string): string {
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
   /* ==========================================================
-     PRIVATE REST CLIENT HELPER
+     REST CLIENT HELPER
      ========================================================== */
 
-  private async driveFetch<T = any>(
+  private async driveFetch<T = unknown>(
     url: string,
     token: string,
     options: RequestInit = {}
@@ -115,7 +101,7 @@ export class GDriveSyncService {
     }
 
     if (response.status === 403) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
       throw new Error(
         `Google API Forbidden: ${errorData.error?.message || 'Check Drive API configuration'}`
       );
@@ -125,7 +111,11 @@ export class GDriveSyncService {
       throw new Error(`Google Drive API Error (${response.status}): ${response.statusText}`);
     }
 
-    return response.json();
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return response.json() as Promise<T>;
   }
 
   /* ==========================================================
@@ -209,17 +199,18 @@ export class GDriveSyncService {
     const ss = pad(now.getSeconds());
     const fff = pad(now.getMilliseconds(), 3);
 
-    return `BKP_${DD}${MM}${YY}_${HH}:${mm}:${ss}.${fff}.json`;
+    return `BKP_${DD}${MM}${YY}_${HH}${mm}${ss}_${fff}.json`;
   }
 
   /* ==========================================================
-     AUTOMATIC FOLDER CREATION & MANAGEMENT
+     AUTOMATIC FOLDER CREATION & PRUNING
      ========================================================== */
 
   async getOrCreateFolder(token: string | null, folderName: string): Promise<string> {
     const activeToken = await this.ensureValidToken(token);
+    const safeName = this.escapeQuery(folderName);
     const query = encodeURIComponent(
-      `name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and 'appDataFolder' in parents and trashed = false`
+      `name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and 'appDataFolder' in parents and trashed = false`
     );
 
     const searchData = await this.driveFetch<{ files?: GDriveFile[] }>(
@@ -257,6 +248,29 @@ export class GDriveSyncService {
       folderNames.map(async (name) => [name, await this.getOrCreateFolder(activeToken, name)])
     );
     return Object.fromEntries(folderEntries);
+  }
+
+  private async pruneOldBackups(token: string, parentFolderId: string): Promise<void> {
+    const query = encodeURIComponent(
+      `'${this.escapeQuery(parentFolderId)}' in parents and trashed = false and name contains 'BKP_'`
+    );
+
+    const result = await this.driveFetch<{ files?: GDriveFile[] }>(
+      `${DRIVE_API_BASE}/files?spaces=appDataFolder&q=${query}&orderBy=createdTime%20desc&pageSize=100&fields=files(id,name,createdTime)`,
+      token
+    );
+
+    const files = result.files || [];
+    if (files.length > this.maxBackupsToKeep) {
+      const filesToDelete = files.slice(this.maxBackupsToKeep);
+      await Promise.all(
+        filesToDelete.map((file) =>
+          this.driveFetch(`${DRIVE_API_BASE}/files/${file.id}`, token, { method: 'DELETE' }).catch(
+            (err) => console.warn(`Failed to prune backup file ${file.id}:`, err)
+          )
+        )
+      );
+    }
   }
 
   /* ==========================================================
@@ -309,7 +323,7 @@ export class GDriveSyncService {
           throw new Error('Google Client ID is missing in environment variables.');
         }
 
-        const client = window.google.accounts.oauth2.initTokenClient({
+        const client: TokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id,
           scope: this.scopes,
           callback: async (response) => {
@@ -317,10 +331,10 @@ export class GDriveSyncService {
               if (prompt === '') {
                 resolve(this.requestAuth('select_account'));
               } else {
-                reject(response.error);
+                reject(new Error(typeof response.error === 'string' ? response.error : 'Auth failed'));
               }
             } else if (response.access_token) {
-              const expiresInMs = (response.expires_in || 3600) * 1000;
+              const expiresInMs = (Number(response.expires_in) || 3600) * 1000;
               const expiresAt = Date.now() + expiresInMs;
 
               localStorage.setItem(this.tokenKey, response.access_token);
@@ -364,8 +378,10 @@ export class GDriveSyncService {
     fileName: string,
     parentFolderId = 'appDataFolder'
   ): Promise<GDriveFile | null> {
+    const safeName = this.escapeQuery(fileName);
+    const safeParent = this.escapeQuery(parentFolderId);
     const query = encodeURIComponent(
-      `name = '${fileName}' and '${parentFolderId}' in parents and trashed = false`
+      `name = '${safeName}' and '${safeParent}' in parents and trashed = false`
     );
 
     const result = await this.driveFetch<{ files?: GDriveFile[] }>(
@@ -380,8 +396,9 @@ export class GDriveSyncService {
     token: string,
     parentFolderId = 'appDataFolder'
   ): Promise<GDriveFile | null> {
+    const safeParent = this.escapeQuery(parentFolderId);
     const query = encodeURIComponent(
-      `'${parentFolderId}' in parents and trashed = false and name contains 'BKP_'`
+      `'${safeParent}' in parents and trashed = false and name contains 'BKP_'`
     );
 
     const result = await this.driveFetch<{ files?: GDriveFile[] }>(
@@ -413,10 +430,10 @@ export class GDriveSyncService {
       throw new Error(`Failed to create file on GDrive: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<GDriveFile>;
   }
 
-  async readFile<T = any>(token: string, fileId: string): Promise<T> {
+  async readFile<T = unknown>(token: string, fileId: string): Promise<T> {
     const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?alt=media`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -425,7 +442,7 @@ export class GDriveSyncService {
       throw new Error(`Failed to read file content: ${response.statusText}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /* ==========================================================
@@ -451,10 +468,11 @@ export class GDriveSyncService {
       } else if (strategy === 'remote-wins') {
         await this.importBackupFromDrive(activeToken, latestRemoteFile.name);
       } else {
-        const remoteData = await this.readFile<{ accounts?: any[]; transactions?: any[]; categories?: any[] }>(
-          activeToken,
-          latestRemoteFile.id
-        );
+        const remoteData = await this.readFile<{
+          accounts?: Account[];
+          transactions?: Transaction[];
+          categories?: Category[];
+        }>(activeToken, latestRemoteFile.id);
 
         const localAccounts = await db.accounts.toArray();
         const localTransactions = await db.transactions.toArray();
@@ -469,9 +487,9 @@ export class GDriveSyncService {
           await db.transactions.clear();
           await db.categories.clear();
 
-          if (mergedAccounts.length) await db.accounts.bulkAdd(mergedAccounts);
-          if (mergedTransactions.length) await db.transactions.bulkAdd(mergedTransactions);
-          if (mergedCategories.length) await db.categories.bulkAdd(mergedCategories);
+          if (mergedAccounts.length) await db.accounts.bulkPut(mergedAccounts);
+          if (mergedTransactions.length) await db.transactions.bulkPut(mergedTransactions);
+          if (mergedCategories.length) await db.categories.bulkPut(mergedCategories);
         });
 
         const mergedBlob = new Blob(
@@ -493,9 +511,10 @@ export class GDriveSyncService {
         await this.createFile(activeToken, mergedBlob, this.generateBackupFileName(), backupFolderId);
       }
 
+      await this.pruneOldBackups(activeToken, backupFolderId);
       localStorage.setItem(this.lastSyncKey, Date.now().toString());
-    } catch (err: any) {
-      this.lastError = err.message || 'Synchronization failed.';
+    } catch (err: unknown) {
+      this.lastError = err instanceof Error ? err.message : 'Synchronization failed.';
       throw err;
     } finally {
       this.isSyncing = false;
@@ -503,12 +522,12 @@ export class GDriveSyncService {
     }
   }
 
-  private mergeEntities<T extends { id: string; updatedAt?: number; date?: number }>(
+  private mergeEntities<T extends { id: string; updatedAt?: number }>(
     localList: T[],
     remoteList: T[]
   ): T[] {
     const map = new Map<string, T>();
-    const getItemTimestamp = (item: T): number => item.updatedAt ?? item.date ?? 0;
+    const getItemTimestamp = (item: T): number => item.updatedAt ?? 0;
 
     localList.forEach((item) => map.set(item.id, item));
 
@@ -542,6 +561,7 @@ export class GDriveSyncService {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 
     await this.createFile(activeToken, blob, fileName, backupFolderId);
+    await this.pruneOldBackups(activeToken, backupFolderId);
     return fileName;
   }
 
@@ -558,19 +578,20 @@ export class GDriveSyncService {
       throw new Error('No valid backup file found on Google Drive.');
     }
 
-    const data = await this.readFile<{ accounts?: any[]; transactions?: any[]; categories?: any[] }>(
-      activeToken,
-      fileToImport.id
-    );
+    const data = await this.readFile<{
+      accounts?: Account[];
+      transactions?: Transaction[];
+      categories?: Category[];
+    }>(activeToken, fileToImport.id);
 
     await db.transaction('rw', [db.accounts, db.transactions, db.categories], async () => {
       await db.accounts.clear();
       await db.transactions.clear();
       await db.categories.clear();
 
-      if (data.accounts?.length) await db.accounts.bulkAdd(data.accounts);
-      if (data.transactions?.length) await db.transactions.bulkAdd(data.transactions);
-      if (data.categories?.length) await db.categories.bulkAdd(data.categories);
+      if (data.accounts?.length) await db.accounts.bulkPut(data.accounts);
+      if (data.transactions?.length) await db.transactions.bulkPut(data.transactions);
+      if (data.categories?.length) await db.categories.bulkPut(data.categories);
     });
   }
 }

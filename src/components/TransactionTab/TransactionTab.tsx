@@ -1,15 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ViewToggles } from './view/ViewToggles';
 import { filterAndSortTransactions } from './feature/filterTransaction';
-import { Box, Card } from '@mui/material';
+import { Box } from '@mui/material';
 import type { Transaction, Account, Category } from '@/db/schema';
 import { deleteTransactionWithSync } from '@/services/financeService';
 import { NoDataView } from './view/LedgerOutput/NoDataView';
-import { GroupTotalAndTitle } from './view/LedgerOutput/DataView';
+import DayGroupCard from './view/LedgerOutput/DayGroupCard';
 import { GroupData } from './feature/GroupData';
 import { DeleteDialog } from './view/DeleteDialog';
 import { TransactionRow, type ViewMode } from './view/LedgerOutput/TransactionRow';
-import { DateRangePicker } from './view/DateRangePicker';
+import { MonthYearSelector } from './view/MonthSelector';
 
 export interface TransactionsTabProps {
   transactions: Transaction[];
@@ -24,50 +24,74 @@ const VIEW_MODE_MAP: Record<number, ViewMode> = {
   2: 'yearly',
 };
 
-/** Helper to convert 'YYYY-MM-DD' strings safely into start/end of day epoch numbers */
-const parseDateFilter = (dateStr: string, isEnd: boolean = false): number | null => {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  if (isEnd) {
-    d.setHours(23, 59, 59, 999);
-  } else {
-    d.setHours(0, 0, 0, 0);
-  }
-  return d.getTime();
-};
-
-/*
- * Main Transactions Tab Component
- * Displays transaction history with filtering, grouping, and actions
- */
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   transactions,
   accounts,
   categories,
   format,
 }) => {
-  // View mode state: 0=daily, 1=monthly, 2=yearly
   const [value, setValue] = useState<number>(0);
-  // Date range filter states for daily view
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  // ID of transaction pending deletion confirmation
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const viewMode = VIEW_MODE_MAP[value] || 'daily';
 
-  // 1. Filtered and Sorted Transactions (Latest First) with Proper Epoch Translation
-  const filteredTx = useMemo(
-    () =>
-      filterAndSortTransactions(transactions, {
-        startDate: parseDateFilter(startDate, false),
-        endDate: parseDateFilter(endDate, true),
-      }),
-    [transactions, startDate, endDate]
+  // Compute boundaries for active month to avoid memory lag on large datasets
+  const { monthStartMs, monthEndMs } = useMemo(() => {
+    const start = new Date(selectedYear, selectedMonth, 1, 0, 0, 0, 0).getTime();
+    const end = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999).getTime();
+    return { monthStartMs: start, monthEndMs: end };
+  }, [selectedYear, selectedMonth]);
+
+  // Store full Category objects in Map to resolve parentId and subcategory relationships
+  const categoryMap = useMemo(() => {
+    return new Map(categories.map((c) => [c.id, c]));
+  }, [categories]);
+
+  const getCategoryName = useCallback(
+    (tx: Transaction) => {
+      if (tx.type === 'transfer') return 'Transfer';
+
+      const rawTx = tx as Record<string, any>;
+      const catId = rawTx.categoryId || rawTx.category_id;
+      const subCatId = rawTx.subCategoryId || rawTx.subcategoryId || rawTx.sub_category_id;
+
+      // 1. Handles separate categoryId (Parent) and subCategoryId (Child)
+      if (catId && subCatId) {
+        const parentCat = categoryMap.get(catId);
+        const subCat = categoryMap.get(subCatId);
+        if (parentCat && subCat) {
+          return `${parentCat.name} / ${subCat.name}`;
+        }
+      }
+
+      // 2. Handles categoryId pointing to a subcategory with a parentId reference
+      if (catId) {
+        const cat = categoryMap.get(catId);
+        if (cat) {
+          if (cat.parentId) {
+            const parentCat = categoryMap.get(cat.parentId);
+            if (parentCat) {
+              return `${parentCat.name} / ${cat.name}`;
+            }
+          }
+          return cat.name;
+        }
+      }
+
+      return 'Uncategorized';
+    },
+    [categoryMap]
   );
 
-  // 2. Grouped Engine with Group Totals
+  const filteredTx = useMemo(() => {
+    return filterAndSortTransactions(transactions, {
+      startDate: value === 0 ? monthStartMs : null,
+      endDate: value === 0 ? monthEndMs : null,
+    });
+  }, [transactions, value, monthStartMs, monthEndMs]);
+
   const groupedData = useMemo(() => {
     return GroupData({ value, filteredTx });
   }, [filteredTx, value]);
@@ -84,80 +108,48 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
     }
   };
 
-  const getCategoryName = (tx: Transaction) => {
-    if (tx.type === 'transfer') return 'Transfer';
-    const cat = categories.find((c) => c.id === tx.categoryId);
-    return cat ? cat.name : 'Uncategorized';
-  };
+  const handleEditTx = useCallback((tx: Transaction) => {
+    window.dispatchEvent(
+      new CustomEvent('open-edit-modal', { detail: tx })
+    );
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* View Toggles - controls transaction view mode (Daily/Monthly/Yearly) */}
       <ViewToggles value={value} onChange={setValue} />
 
-      {/* Date Range Picker - only shown when Daily is selected (value === 0) */}
       {value === 0 && (
-        <DateRangePicker
-          startDate={startDate}
-          endDate={endDate}
-          setStartDate={setStartDate}
-          setEndDate={setEndDate}
+        <MonthYearSelector
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onChange={(y, m) => {
+            setSelectedYear(y);
+            setSelectedMonth(m);
+          }}
         />
       )}
 
-      {/* Ledger Output */}
       {Object.keys(groupedData).length === 0 ? (
         <NoDataView />
       ) : (
         Object.entries(groupedData).map(
           ([groupTitle, { items, netCents, totalIncome, totalExpense }]) => (
-            <Box key={groupTitle}>
+            <Box key={groupTitle} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {value === 0 ? (
-                /* Daily View: Group Header + Transaction Cards */
-                <>
-                  <GroupTotalAndTitle
-                    groupTitle={groupTitle}
-                    totalIncome={totalIncome}
-                    totalExpense={totalExpense}
-                    netCents={netCents}
-                  />
-                  <Card
-                    sx={{
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      boxShadow: 'none',
-                      borderRadius: '20px',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {items.map((tx, idx) => (
-                      <Box
-                        key={tx.id}
-                        sx={{
-                          borderBottom:
-                            idx !== items.length - 1 ? '1px solid' : 'none',
-                          borderColor: 'divider',
-                        }}
-                      >
-                        <TransactionRow
-                          tx={tx}
-                          accounts={accounts}
-                          getCategoryName={getCategoryName}
-                          format={format}
-                          onDelete={() => setDeleteId(tx.id)}
-                          onEdit={() => {
-                            window.dispatchEvent(
-                              new CustomEvent('open-edit-modal', { detail: tx })
-                            );
-                          }}
-                          viewMode="daily"
-                        />
-                      </Box>
-                    ))}
-                  </Card>
-                </>
+                <DayGroupCard
+                  groupTitle={groupTitle}
+                  totalIncome={totalIncome}
+                  totalExpense={totalExpense}
+                  netCents={netCents}
+                  transactions={items}
+                  accounts={accounts}
+                  categories={categories}
+                  getCategoryName={getCategoryName}
+                  format={format}
+                  onDeleteTx={(id) => setDeleteId(id)}
+                  onEditTx={handleEditTx}
+                />
               ) : (
-                /* Monthly / Yearly View: Stacked Month/Year Summary Row */
                 <TransactionRow
                   viewMode={viewMode}
                   periodLabel={groupTitle}
@@ -174,7 +166,6 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         )
       )}
 
-      {/* Delete Confirmation Dialog */}
       <DeleteDialog
         deleteId={deleteId}
         setDeleteId={setDeleteId}

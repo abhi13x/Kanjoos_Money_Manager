@@ -1,260 +1,275 @@
-import type { Category, Transaction } from '@/db/schema';
-import { getParentId, transactionMatchesCategory } from './Helper';
-import { CATEGORY_COLORS } from '../../../constants/statsTab';
+// features/CategoryManager.ts
 
-export type StatType = 'expense' | 'income';
+import type { Transaction, Category } from "@/db/schema";
 
-export interface SortedCategoryOption {
-  id: string;
-  label: string;
-  isSub: boolean;
-}
+// System Palette Fallbacks for Category Visuals
+export const DEFAULT_CATEGORY_COLORS = [
+  "#007AFF", // System Blue
+  "#FF9500", // System Orange
+  "#AF52DE", // System Purple
+  "#34C759", // System Green
+  "#FF2D55", // System Pink
+  "#5856D6", // System Indigo
+  "#00C7BE", // System Teal
+  "#FFCC00", // System Yellow
+];
 
-export interface SubCategoryBreakdown {
-  id: string;
+export interface SubCategoryItem {
+  id: string | number;
   name: string;
   amount: number;
-  percentageOfTotal: number;
+  percentage?: number;
 }
 
 export interface CategoryBreakdownItem {
-  id: string;
+  id: string | number;
+  name: string;
+  amount: number;
+  percentage: number;
+  color?: string;
+  subCategories?: SubCategoryItem[];
+}
+
+export interface PieSlice {
+  id: string | number;
   name: string;
   amount: number;
   percentage: number;
   color: string;
-  subCategories: SubCategoryBreakdown[];
 }
 
-type ExtendedCategory = Category & { color?: string; parentId?: string | null };
-type ExtendedTransaction = Transaction & { subCategoryId?: string | null };
-
-/** Safe float rounding to avoid JavaScript precision issues */
-const roundToTwoDecimals = (val: number): number => Math.round((val + Number.EPSILON) * 100) / 100;
+export interface SortedCategoryOption {
+  id: string | number;
+  label: string;
+  value?: string | number;
+  parentId?: string | number | null;
+  isParent?: boolean;
+  type?: "expense" | "income";
+  color?: string;
+}
 
 /**
- * Strictly orders category dropdown options:
- * Parents first (alphabetically), with subcategories nested directly below each parent (alphabetically).
+ * Returns the human-readable display name for the currently selected category option.
+ */
+export const getSelectedCategoryName = (
+  selectedCategory: string | number,
+  categories: Category[]
+): string => {
+  if (!selectedCategory || selectedCategory === "all") {
+    return "All Categories";
+  }
+
+  const foundCategory = categories.find(
+    (cat) => String(cat.id) === String(selectedCategory)
+  );
+
+  return foundCategory ? foundCategory.name : "All Categories";
+};
+
+/**
+ * Generates a hierarchically ordered list of parent and child categories for control selectors.
  */
 export const getSortedCategoryOptions = (
   categories: Category[],
-  statType: StatType
+  statType: "expense" | "income"
 ): SortedCategoryOption[] => {
-  const filtered = categories.filter((c) => c.type === statType);
-  
-  const parentCategories = filtered
-    .filter((c) => !getParentId(c))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const filteredCategories = categories.filter((cat) => cat.type === statType);
+  const parentCategories = filteredCategories.filter((cat) => !cat.parentId);
 
-  return parentCategories.flatMap((parent) => {
-    const parentOption: SortedCategoryOption = {
-      id: parent.id,
-      label: parent.name,
-      isSub: false,
-    };
-
-    const subCategories = filtered
-      .filter((c) => getParentId(c) === parent.id)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-      .map((sub) => ({
-        id: sub.id,
-        label: sub.name,
-        isSub: true,
-      }));
-
-    return [parentOption, ...subCategories];
+  const childrenMap = new Map<string | number, Category[]>();
+  filteredCategories.forEach((cat) => {
+    if (cat.parentId) {
+      const existing = childrenMap.get(cat.parentId) || [];
+      existing.push(cat);
+      childrenMap.set(cat.parentId, existing);
+    }
   });
+
+  const sortedOptions: SortedCategoryOption[] = [
+    {
+      id: "all",
+      label: "All Categories",
+      value: "all",
+      isParent: true,
+      type: statType,
+    },
+  ];
+
+  parentCategories
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((parent) => {
+      sortedOptions.push({
+        id: parent.id,
+        label: parent.name,
+        value: parent.id,
+        parentId: null,
+        isParent: true,
+        type: parent.type as "expense" | "income",
+        color: parent.color ?? undefined,
+      });
+
+      const children = childrenMap.get(parent.id) || [];
+      children
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((child) => {
+          sortedOptions.push({
+            id: child.id,
+            label: `— ${child.name}`,
+            value: child.id,
+            parentId: parent.id,
+            isParent: false,
+            type: child.type as "expense" | "income",
+            color: child.color ?? undefined,
+          });
+        });
+    });
+
+  return sortedOptions;
 };
 
 /**
- * Functional, highly-optimized category expenditure breakdown generator using Map primitives.
- * - If selectedCategory is 'all' or empty: groups by Parent Categories.
- * - If a specific parent category is selected: groups by Child Subcategories.
+ * Aggregates transaction data into main category breakdown or child category breakdown when filtered.
  */
 export const getCategoryBreakdown = (
-  breakdownFilteredTx: Transaction[],
+  transactions: Transaction[],
   categories: Category[],
-  selectedCategory: string
+  selectedCategory: string | number
 ): CategoryBreakdownItem[] => {
-  const categoryLookupMap = new Map<string, ExtendedCategory>(
-    categories.map((c) => [c.id, c])
-  );
+  if (!transactions || transactions.length === 0) return [];
 
-  const isFilteredByParent = Boolean(selectedCategory && selectedCategory !== 'all');
+  const categoryMap = new Map<string, Category>();
+  categories.forEach((cat) => categoryMap.set(String(cat.id), cat));
 
-  // Branch 1: Specific Parent Category Selected -> Group into Child Subcategories
+  const isFilteredByParent = selectedCategory !== "all" && selectedCategory !== "";
+
   if (isFilteredByParent) {
-    const targetCategory = categoryLookupMap.get(selectedCategory);
-    const parentColor = targetCategory?.color;
+    const childCategories = categories.filter(
+      (cat) => String(cat.parentId) === String(selectedCategory)
+    );
 
-    type SubAcc = {
-      id: string;
-      name: string;
-      amount: number;
-    };
+    if (childCategories.length > 0) {
+      const childIds = new Set(childCategories.map((cat) => String(cat.id)));
+      const subCategoryAmounts = new Map<string, number>();
+      let filteredTotal = 0;
 
-    const subAggregatesMap = new Map<string, SubAcc>();
-    let totalSelectedAmount = 0;
+      transactions.forEach((tx) => {
+        const txCatId = String(tx.categoryId);
+        if (childIds.has(txCatId) || txCatId === String(selectedCategory)) {
+          const amt = Math.abs(tx.amount);
+          filteredTotal += amt;
+          const targetKey = childIds.has(txCatId) ? txCatId : String(selectedCategory);
+          subCategoryAmounts.set(
+            targetKey,
+            (subCategoryAmounts.get(targetKey) || 0) + amt
+          );
+        }
+      });
 
-    for (const tx of breakdownFilteredTx) {
-      if (!transactionMatchesCategory(tx, selectedCategory, categories)) {
-        continue;
-      }
+      const breakdown: CategoryBreakdownItem[] = [];
+      subCategoryAmounts.forEach((amt, catId) => {
+        const cat = categoryMap.get(catId);
+        if (amt > 0) {
+          breakdown.push({
+            id: catId,
+            name: cat ? cat.name : "Uncategorized",
+            amount: amt,
+            percentage: filteredTotal > 0 ? (amt / filteredTotal) * 100 : 0,
+            color: cat?.color ?? undefined,
+          });
+        }
+      });
 
-      const txExt = tx as ExtendedTransaction;
-      const txCat = tx.categoryId ? categoryLookupMap.get(tx.categoryId) : undefined;
-      const txSubCat = txExt.subCategoryId ? categoryLookupMap.get(txExt.subCategoryId) : undefined;
-
-      let childId: string;
-      let childName: string;
-
-      if (txSubCat && txSubCat.id !== selectedCategory) {
-        childId = txSubCat.id;
-        childName = txSubCat.name;
-      } else if (txCat && getParentId(txCat) === selectedCategory) {
-        childId = txCat.id;
-        childName = txCat.name;
-      } else {
-        childId = `${selectedCategory}-direct`;
-        childName = targetCategory ? `${targetCategory.name} (Direct)` : 'General / Direct';
-      }
-
-      let existing = subAggregatesMap.get(childId);
-      if (!existing) {
-        existing = { id: childId, name: childName, amount: 0 };
-        subAggregatesMap.set(childId, existing);
-      }
-
-      existing.amount += tx.amount;
-      totalSelectedAmount += tx.amount;
-    }
-
-    return Array.from(subAggregatesMap.values())
-      .map((item, index) => {
-        const percentage = totalSelectedAmount > 0 
-          ? roundToTwoDecimals((item.amount / totalSelectedAmount) * 100) 
-          : 0;
-        const color = parentColor || CATEGORY_COLORS[index % CATEGORY_COLORS.length];
-
-        return {
-          id: item.id,
-          name: item.name,
-          amount: item.amount,
-          percentage,
-          color,
-          subCategories: [],
-        };
-      })
-      .sort((a, b) => b.amount - a.amount);
-  }
-
-  // Branch 2: 'all' Selected -> Group into Parent Categories with Nested Subcategories
-  type AccValue = {
-    id: string;
-    name: string;
-    amount: number;
-    customColor?: string;
-    subMap: Map<string, { id: string; name: string; amount: number }>;
-  };
-
-  const parentAggregatesMap = new Map<string, AccValue>();
-  let totalAmount = 0;
-
-  for (const tx of breakdownFilteredTx) {
-    const txExt = tx as ExtendedTransaction;
-    const txCat = tx.categoryId ? categoryLookupMap.get(tx.categoryId) : undefined;
-    const txSubCat = txExt.subCategoryId ? categoryLookupMap.get(txExt.subCategoryId) : undefined;
-
-    let parentId: string;
-    let parentName: string;
-    let parentColor: string | undefined;
-    let subId: string | null = null;
-    let subName: string | null = null;
-
-    if (txSubCat) {
-      subId = txSubCat.id;
-      subName = txSubCat.name;
-      const pId = getParentId(txSubCat);
-      const targetParentId = pId || tx.categoryId;
-      const pCat = targetParentId ? categoryLookupMap.get(targetParentId) : undefined;
-
-      parentId = pCat?.id ?? tx.categoryId ?? 'uncategorized';
-      parentName = pCat?.name ?? 'Uncategorized';
-      parentColor = pCat?.color;
-    } else if (txCat) {
-      const pId = getParentId(txCat);
-      if (pId) {
-        subId = txCat.id;
-        subName = txCat.name;
-        const pCat = categoryLookupMap.get(pId);
-        parentId = pCat?.id ?? txCat.id;
-        parentName = pCat?.name ?? txCat.name;
-        parentColor = pCat?.color ?? txCat.color;
-      } else {
-        parentId = txCat.id;
-        parentName = txCat.name;
-        parentColor = txCat.color;
-      }
-    } else {
-      parentId = 'uncategorized';
-      parentName = 'Uncategorized';
-    }
-
-    let existingParent = parentAggregatesMap.get(parentId);
-    if (!existingParent) {
-      existingParent = {
-        id: parentId,
-        name: parentName,
-        amount: 0,
-        customColor: parentColor,
-        subMap: new Map(),
-      };
-      parentAggregatesMap.set(parentId, existingParent);
-    }
-
-    existingParent.amount += tx.amount;
-    totalAmount += tx.amount;
-
-    if (subId && subName) {
-      const existingSub = existingParent.subMap.get(subId);
-      if (existingSub) {
-        existingSub.amount += tx.amount;
-      } else {
-        existingParent.subMap.set(subId, { id: subId, name: subName, amount: tx.amount });
-      }
+      return breakdown.sort((a, b) => b.amount - a.amount);
     }
   }
 
-  return Array.from(parentAggregatesMap.values())
-    .map((parent, index) => {
-      const percentage = totalAmount > 0 ? roundToTwoDecimals((parent.amount / totalAmount) * 100) : 0;
-      const color = parent.customColor || CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+  const parentTotals = new Map<
+    string,
+    { amount: number; subCats: Map<string, number> }
+  >();
+  let grandTotal = 0;
 
-      const subCategories: SubCategoryBreakdown[] = Array.from(parent.subMap.values())
-        .map((sub) => ({
-          id: sub.id,
-          name: sub.name,
-          amount: sub.amount,
-          percentageOfTotal: totalAmount > 0 ? roundToTwoDecimals((sub.amount / totalAmount) * 100) : 0,
-        }))
-        .sort((a, b) => b.amount - a.amount);
+  transactions.forEach((tx) => {
+    const amt = Math.abs(tx.amount);
+    grandTotal += amt;
 
-      return {
-        id: parent.id,
-        name: parent.name,
-        amount: parent.amount,
-        percentage,
-        color,
-        subCategories,
-      };
-    })
-    .sort((a, b) => b.amount - a.amount);
+    const cat = categoryMap.get(String(tx.categoryId));
+    const parentId = cat
+      ? cat.parentId
+        ? String(cat.parentId)
+        : String(cat.id)
+      : "uncategorized";
+
+    if (!parentTotals.has(parentId)) {
+      parentTotals.set(parentId, { amount: 0, subCats: new Map() });
+    }
+
+    const parentRecord = parentTotals.get(parentId)!;
+    parentRecord.amount += amt;
+
+    if (cat && cat.parentId) {
+      const childId = String(cat.id);
+      parentRecord.subCats.set(
+        childId,
+        (parentRecord.subCats.get(childId) || 0) + amt
+      );
+    }
+  });
+
+  const breakdown: CategoryBreakdownItem[] = [];
+
+  parentTotals.forEach((data, parentId) => {
+    const parentCat = categoryMap.get(parentId);
+    const subCategories: SubCategoryItem[] = [];
+
+    data.subCats.forEach((subAmt, subId) => {
+      const subCat = categoryMap.get(subId);
+      subCategories.push({
+        id: subId,
+        name: subCat ? subCat.name : "Other",
+        amount: subAmt,
+        percentage: data.amount > 0 ? (subAmt / data.amount) * 100 : 0,
+      });
+    });
+
+    breakdown.push({
+      id: parentId,
+      name: parentCat ? parentCat.name : "Uncategorized",
+      amount: data.amount,
+      percentage: grandTotal > 0 ? (data.amount / grandTotal) * 100 : 0,
+      color: parentCat?.color ?? undefined,
+      subCategories: subCategories.sort((a, b) => b.amount - a.amount),
+    });
+  });
+
+  return breakdown.sort((a, b) => b.amount - a.amount);
 };
 
-export const getSelectedCategoryName = (
-  selectedCategory: string,
-  categories: Category[]
-): string => {
-  if (selectedCategory === 'all' || !selectedCategory) return 'All Categories';
-  return categories.find((c) => c.id === selectedCategory)?.name ?? 'Category';
+/**
+ * Computes individual pie slices for donut chart rendering.
+ */
+export const getPieSlices = (
+  categoryBreakdown: CategoryBreakdownItem[],
+  totalBreakdownAmount: number
+): PieSlice[] => {
+  const firstItem = categoryBreakdown[0];
+  const subCategories = firstItem?.subCategories;
+
+  if (categoryBreakdown.length === 1 && subCategories && subCategories.length > 0) {
+    return subCategories.map((sub, idx) => ({
+      id: sub.id,
+      name: sub.name,
+      amount: sub.amount,
+      percentage: totalBreakdownAmount > 0 ? (sub.amount / totalBreakdownAmount) * 100 : 0,
+      color: DEFAULT_CATEGORY_COLORS[idx % DEFAULT_CATEGORY_COLORS.length],
+    }));
+  }
+
+  return categoryBreakdown.map((item, idx) => ({
+    id: item.id,
+    name: item.name,
+    amount: item.amount,
+    percentage: item.percentage,
+    color: item.color || DEFAULT_CATEGORY_COLORS[idx % DEFAULT_CATEGORY_COLORS.length],
+  }));
 };

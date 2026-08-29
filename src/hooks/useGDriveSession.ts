@@ -24,6 +24,13 @@ export interface UseGDriveSessionReturn {
   importBackup: (customFileName?: string) => Promise<void>;
 }
 
+interface GDriveStoreState {
+  isConnected: boolean;
+  isSyncing: boolean;
+  lastSyncTime: number | null;
+  error: string | null;
+}
+
 const SESSION_CHANGE_EVENT = 'kanjoos_gdrive_session_change';
 
 const syncService = GDriveSyncService.getInstance({
@@ -40,13 +47,12 @@ const notifySessionChange = () => {
 };
 
 /* ==========================================================
-   EXTERNAL STORE SUBSCRIPTION & SNAPSHOT SELECTORS
+   EXTERNAL STORE SUBSCRIPTION & SINGLE SNAPSHOT SELECTOR
    ========================================================== */
 
 const subscribe = (callback: () => void) => {
   if (typeof window === 'undefined') return () => {};
 
-  // Combine GDriveSyncService updates with browser storage events for multi-tab sync
   const unsubscribeService = syncService.subscribe(callback);
 
   const handleStorage = (event: StorageEvent) => {
@@ -65,69 +71,77 @@ const subscribe = (callback: () => void) => {
   };
 };
 
-const getConnectedSnapshot = (): boolean => syncService.hasCachedSession();
-const getIsSyncingSnapshot = (): boolean => syncService.getStatus().isSyncing;
-const getLastSyncTimeSnapshot = (): number | null => syncService.getStatus().lastSyncTime;
-const getErrorSnapshot = (): string | null => syncService.getStatus().error;
+let cachedState: GDriveStoreState = {
+  isConnected: false,
+  isSyncing: false,
+  lastSyncTime: null,
+  error: null,
+};
 
-// SSR Fallbacks
-const getServerBooleanSnapshot = (): boolean => false;
-const getServerNullSnapshot = (): null => null;
+const getStoreSnapshot = (): GDriveStoreState => {
+  const status = syncService.getStatus();
+  const isConnected = syncService.hasCachedSession();
+
+  // Return identical object reference if primitives haven't changed to prevent unnecessary re-renders
+  if (
+    cachedState.isConnected === isConnected &&
+    cachedState.isSyncing === status.isSyncing &&
+    cachedState.lastSyncTime === status.lastSyncTime &&
+    cachedState.error === status.error
+  ) {
+    return cachedState;
+  }
+
+  cachedState = {
+    isConnected,
+    isSyncing: status.isSyncing,
+    lastSyncTime: status.lastSyncTime,
+    error: status.error,
+  };
+
+  return cachedState;
+};
+
+const getServerSnapshot = (): GDriveStoreState => ({
+  isConnected: false,
+  isSyncing: false,
+  lastSyncTime: null,
+  error: null,
+});
 
 /* ==========================================================
    HOOK IMPLEMENTATION
    ========================================================== */
 
-/**
- * Custom hook to manage Google Drive OAuth sessions, monitor sync status,
- * and execute backup/restore operations reactively.
- */
 export const useGDriveSession = (): UseGDriveSessionReturn => {
-  const isConnected = useSyncExternalStore(
+  const storeState = useSyncExternalStore(
     subscribe,
-    getConnectedSnapshot,
-    getServerBooleanSnapshot
-  );
-
-  const isSyncing = useSyncExternalStore(
-    subscribe,
-    getIsSyncingSnapshot,
-    getServerBooleanSnapshot
-  );
-
-  const lastSyncTime = useSyncExternalStore(
-    subscribe,
-    getLastSyncTimeSnapshot,
-    getServerNullSnapshot
-  );
-
-  const error = useSyncExternalStore(
-    subscribe,
-    getErrorSnapshot,
-    getServerNullSnapshot
+    getStoreSnapshot,
+    getServerSnapshot
   );
 
   const [isPending, setIsPending] = useState<boolean>(false);
 
-  /* ==========================================================
-     MEMOIZED SESSION ACTIONS
-     ========================================================== */
+  // Private helper to retrieve token without mutating UI pending state directly
+  const getOrAcquireToken = useCallback(async (): Promise<string> => {
+    const cached = await syncService.getValidToken(false);
+    if (cached) return cached;
+
+    const token = await syncService.authenticate();
+    if (!token) throw new Error('Google sign-in was cancelled.');
+
+    notifySessionChange();
+    return token;
+  }, []);
 
   const ensureAuthenticated = useCallback(async (): Promise<string> => {
     setIsPending(true);
     try {
-      const cached = await syncService.getValidToken(false);
-      if (cached) return cached;
-
-      const token = await syncService.authenticate();
-      if (!token) throw new Error('Google sign-in was cancelled.');
-
-      notifySessionChange();
-      return token;
+      return await getOrAcquireToken();
     } finally {
       setIsPending(false);
     }
-  }, []);
+  }, [getOrAcquireToken]);
 
   const disconnect = useCallback(() => {
     syncService.clearSession();
@@ -148,7 +162,7 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
     async (customFileName?: string): Promise<string> => {
       setIsPending(true);
       try {
-        const token = await ensureAuthenticated();
+        const token = await getOrAcquireToken();
         const fileName = await syncService.exportBackupToDrive(token, customFileName);
         notifySessionChange();
         return fileName;
@@ -156,28 +170,25 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
         setIsPending(false);
       }
     },
-    [ensureAuthenticated]
+    [getOrAcquireToken]
   );
 
   const importBackup = useCallback(
     async (customFileName?: string): Promise<void> => {
       setIsPending(true);
       try {
-        const token = await ensureAuthenticated();
+        const token = await getOrAcquireToken();
         await syncService.importBackupFromDrive(token, customFileName);
         notifySessionChange();
       } finally {
         setIsPending(false);
       }
     },
-    [ensureAuthenticated]
+    [getOrAcquireToken]
   );
 
   return {
-    isConnected,
-    isSyncing,
-    lastSyncTime,
-    error,
+    ...storeState,
     isPending,
     ensureAuthenticated,
     disconnect,

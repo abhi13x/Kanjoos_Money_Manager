@@ -1,7 +1,6 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 import type { ThemeMode } from '@/hooks/useSettings';
 
-// Module Augmentation for custom palette fields (e.g. soft background fills)
 declare module '@mui/material/styles' {
   interface SimplePaletteColorOptions {
     soft?: string;
@@ -11,19 +10,12 @@ declare module '@mui/material/styles' {
   }
 }
 
-export const getAppTheme = (mode: ThemeMode): Theme => {
-  // SSR-safe browser preference check
-  const isSystemDark =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-  const resolvedMode = mode === 'system' ? (isSystemDark ? 'dark' : 'light') : mode;
-  const isDark = resolvedMode === 'dark';
+const buildTheme = (mode: 'light' | 'dark'): Theme => {
+  const isDark = mode === 'dark';
 
   return createTheme({
     palette: {
-      mode: resolvedMode as 'light' | 'dark',
+      mode,
       primary: {
         main: isDark ? '#a78bfa' : '#6d28d9',
         light: isDark ? '#c4b5fd' : '#8b5cf6',
@@ -118,22 +110,22 @@ export const getAppTheme = (mode: ThemeMode): Theme => {
       },
       MuiCard: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             backgroundImage: 'none',
             borderRadius: 18,
-            border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'}`,
+            border: `1px solid ${theme.palette.divider}`,
             boxShadow: 'none',
-          },
+          }),
         },
       },
       MuiOutlinedInput: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             borderRadius: 14,
             '& fieldset': {
-              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
+              borderColor: theme.palette.divider,
             },
-          },
+          }),
         },
       },
       MuiDialog: {
@@ -154,4 +146,18 @@ export const getAppTheme = (mode: ThemeMode): Theme => {
       },
     },
   });
+};
+
+// Singleton theme instances to prevent re-creation during render cycles
+const lightTheme = buildTheme('light');
+const darkTheme = buildTheme('dark');
+
+export const getAppTheme = (mode: ThemeMode): Theme => {
+  const isSystemDark =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  const resolvedMode = mode === 'system' ? (isSystemDark ? 'dark' : 'light') : mode;
+  return resolvedMode === 'dark' ? darkTheme : lightTheme;
 };

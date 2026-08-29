@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import type { SxProps, Theme } from '@mui/material/styles';
 import {
   Globe,
@@ -26,7 +29,7 @@ import {
   Tag,
   ChevronRight,
   CheckCircle2,
-  Loader2,
+  User,
 } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useGDriveSession } from '@/hooks/useGDriveSession';
@@ -39,16 +42,16 @@ export interface SettingsTabProps {
 }
 
 const USERNAME_STORAGE_KEY = 'kanjoos_username';
-const DEFAULT_USERNAME = 'Abhishek';
+const DEFAULT_USERNAME = 'User';
 
 /**
- * Settings tab component supporting theme configuration, currency selection,
- * user profile edits, and Google Drive cloud backup synchronization.
+ * iOS-styled Settings view adhering to Apple Human Interface Guidelines (HIG).
+ * Uses inset grouped sections, standard tap target sizes (≥44px), custom dialogs,
+ * and fluid layout structures.
  */
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories, sx }) => {
   const { defaultCurrency, updateDefaultCurrency } = useSettings();
 
-  // Reactive Google Drive session state
   const {
     isConnected,
     isSyncing,
@@ -61,9 +64,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     importBackup,
   } = useGDriveSession();
 
-  // Local notification banner states
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+  const [iCloudInfoOpen, setICloudInfoOpen] = useState(false);
 
   const activeError = localError || hookError;
   const isBusy = isSyncing || isPending;
@@ -107,7 +111,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
   }, []);
 
   /* ==========================================================
-     CLOUD BACKUP ACTIONS & ERROR HANDLING
+     ACTION HANDLERS
      ========================================================== */
 
   const formatErrorMessage = useCallback((err: unknown, fallbackMessage: string): string => {
@@ -129,7 +133,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     setSyncStatus(null);
     try {
       await ensureAuthenticated();
-      setSyncStatus('✓ Connected to Google Drive!');
+      setSyncStatus('Connected to Google Drive');
     } catch (err: unknown) {
       setLocalError(formatErrorMessage(err, 'Failed to authenticate with Google Drive.'));
     }
@@ -140,21 +144,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     setSyncStatus('Uploading backup to Google Drive...');
     try {
       const backupFileName = await exportBackup();
-      setSyncStatus(`✓ Backup saved successfully ("Backups/${backupFileName}")!`);
+      setSyncStatus(`Backup saved ("Backups/${backupFileName}")`);
     } catch (err: unknown) {
       setLocalError(formatErrorMessage(err, 'Failed to export backup to Google Drive.'));
     }
   };
 
-  const handleGoogleImport = async () => {
-    if (!window.confirm('Restoring from Google Drive will replace current local database records. Continue?')) {
-      return;
-    }
+  const executeImport = async () => {
+    setConfirmImportOpen(false);
     setLocalError(null);
     setSyncStatus('Fetching latest backup file...');
     try {
       await importBackup();
-      setSyncStatus('✓ Database restored successfully!');
+      setSyncStatus('Database restored successfully');
     } catch (err: unknown) {
       setLocalError(formatErrorMessage(err, 'Failed to restore database from Google Drive.'));
     }
@@ -165,307 +167,354 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
     setSyncStatus('Google Drive disconnected.');
   };
 
-  const handleAppleMockLogin = () => {
-    window.alert('iCloud Keychain sync is coming soon!');
-  };
-
   const formattedLastSync = lastSyncTime
     ? new Date(lastSyncTime).toLocaleString('en-IN', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
     : null;
 
+  /* ==========================================================
+     REUSABLE IOS STYLED GROUP CONTAINER
+     ========================================================== */
+  const GroupedSection: React.FC<{ title?: string; children: React.ReactNode }> = ({
+    title,
+    children,
+  }) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      {title && (
+        <Typography
+          variant="caption"
+          sx={{
+            px: 2,
+            textTransform: 'uppercase',
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            color: 'text.secondary',
+            fontSize: '0.75rem',
+          }}
+        >
+          {title}
+        </Typography>
+      )}
+      <Box
+        sx={(theme) => ({
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'background.paper',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'divider',
+        })}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, ...sx }}>
-      {/* Alert Status Banners */}
-      {activeError && (
-        <Alert
-          severity="error"
-          onClose={() => setLocalError(null)}
-          sx={{ borderRadius: '12px' }}
-        >
-          {activeError}
-        </Alert>
-      )}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        maxWidth: 680,
+        mx: 'auto',
+        pb: 4,
+        ...sx,
+      }}
+    >
+      {/* Dynamic Banners */}
+      <Stack spacing={1}>
+        {activeError && (
+          <Alert severity="error" onClose={() => setLocalError(null)} sx={{ borderRadius: '14px' }}>
+            {activeError}
+          </Alert>
+        )}
+        {syncStatus && (
+          <Alert severity="success" onClose={() => setSyncStatus(null)} sx={{ borderRadius: '14px' }}>
+            {syncStatus}
+          </Alert>
+        )}
+      </Stack>
 
-      {syncStatus && (
-        <Alert
-          severity="success"
-          onClose={() => setSyncStatus(null)}
-          sx={{ borderRadius: '12px' }}
-        >
-          {syncStatus}
-        </Alert>
-      )}
-
-      <Grid container spacing={3}>
-        {/* Profile & Display Settings */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card
+      {/* Profile Section */}
+      <GroupedSection title="Account & Preferences">
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Username"
+            value={profileName}
+            onChange={(e) => handleProfileNameChange(e.target.value)}
             variant="outlined"
-            sx={{
-              borderRadius: '18px',
-              borderColor: 'divider',
-              boxShadow: 'none',
-              height: '100%',
+            fullWidth
+            slotProps={{
+              input: {
+                startAdornment: <User size={18} style={{ marginRight: 10, opacity: 0.6 }} />,
+              },
+              formHelperText: {
+                sx: {
+                  color: profileSavedMsg ? 'success.main' : 'text.secondary',
+                  fontWeight: profileSavedMsg ? 600 : 400,
+                },
+              },
             }}
-          >
-            <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Profile Config
-              </Typography>
+            helperText={profileSavedMsg ? '✓ Changes saved' : 'Displayed in app greetings'}
+          />
 
-              <TextField
-                label="Username"
-                value={profileName}
-                onChange={(e) => handleProfileNameChange(e.target.value)}
-                helperText={
-                  profileSavedMsg
-                    ? '✓ Username updated'
-                    : 'Editable — saved automatically'
-                }
-                slotProps={{
-                  formHelperText: {
-                    sx: {
-                      color: profileSavedMsg ? 'success.main' : 'text.secondary',
-                      fontWeight: profileSavedMsg ? 600 : 400,
+          <TextField
+            select
+            label="Base Currency"
+            value={defaultCurrency}
+            onChange={(e) => updateDefaultCurrency(e.target.value)}
+            fullWidth
+            slotProps={{
+              select: {
+                MenuProps: {
+                  slotProps: {
+                    paper: {
+                      sx: { borderRadius: '14px', mt: 0.5 },
                     },
                   },
-                }}
-                fullWidth
-              />
-
-              <TextField
-                select
-                label="Base Currency"
-                value={defaultCurrency}
-                onChange={(e) => updateDefaultCurrency(e.target.value)}
-                fullWidth
-                slotProps={{
-                  select: {
-                    MenuProps: {
-                      slotProps: {
-                        paper: {
-                          sx: {
-                            '& .MuiMenuItem-root': {
-                              px: { xs: 2, sm: 3 },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                }}
-              >
-                <MenuItem value="INR">INR (₹)</MenuItem>
-                <MenuItem value="USD">USD ($)</MenuItem>
-                <MenuItem value="EUR">EUR (€)</MenuItem>
-                <MenuItem value="GBP">GBP (£)</MenuItem>
-              </TextField>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Navigation & Preferences */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card
-            variant="outlined"
-            sx={{
-              borderRadius: '18px',
-              borderColor: 'divider',
-              boxShadow: 'none',
-              height: '100%',
+                },
+              },
             }}
           >
-            <CardContent sx={{ p: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800, px: 3, pt: 3, pb: 1 }}>
-                Settings Menu
-              </Typography>
-              <List disablePadding>
-                <ListItemButton
-                  onClick={onNavigateToCategories}
-                  sx={{ py: 2, px: 3, borderRadius: '12px', mx: 1, my: 0.5 }}
-                >
-                  <ListItemIcon sx={{ minWidth: 40, color: 'primary.main' }}>
-                    <Tag size={20} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Manage Categories"
-                    secondary="Income and expense categories"
-                    slotProps={{
-                      primary: { sx: { fontWeight: 700 } },
-                      secondary: { sx: { fontSize: '0.8rem' } },
-                    }}
-                  />
-                  <ChevronRight size={18} />
-                </ListItemButton>
-              </List>
-            </CardContent>
-          </Card>
-        </Grid>
+            <MenuItem value="INR">INR (₹) — Indian Rupee</MenuItem>
+            <MenuItem value="USD">USD ($) — US Dollar</MenuItem>
+            <MenuItem value="EUR">EUR (€) — Euro</MenuItem>
+            <MenuItem value="GBP">GBP (£) — British Pound</MenuItem>
+          </TextField>
+        </Box>
+      </GroupedSection>
 
-        {/* Cloud Sync & Backup Section */}
-        <Grid size={{ xs: 12 }}>
-          <Card
-            variant="outlined"
+      {/* Navigation Group */}
+      <GroupedSection title="Management">
+        <List disablePadding>
+          <ListItemButton
+            onClick={onNavigateToCategories}
             sx={{
-              borderRadius: '18px',
-              borderColor: 'divider',
-              boxShadow: 'none',
+              py: 1.5,
+              px: 2,
+              minHeight: 52,
+              '&:active': { opacity: 0.7 },
             }}
           >
-            <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                }}
-              >
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Sync & Backup
+            <ListItemIcon sx={{ minWidth: 38, color: 'primary.main' }}>
+              <Tag size={20} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Manage Categories"
+              secondary="Income and expense taxonomy"
+              slotProps={{
+                primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } },
+                secondary: { sx: { fontSize: '0.8rem' } },
+              }}
+            />
+            <ChevronRight size={18} style={{ opacity: 0.4 }} />
+          </ListItemButton>
+        </List>
+      </GroupedSection>
+
+      {/* Cloud & Backup Group */}
+      <GroupedSection title="Cloud Backup & Sync">
+        <List disablePadding>
+          {/* Status Row */}
+          <ListItem
+            sx={{
+              py: 1.5,
+              px: 2,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {isConnected ? (
+                <CheckCircle2 size={20} style={{ color: '#10B981' }} />
+              ) : (
+                <Globe size={20} style={{ opacity: 0.5 }} />
+              )}
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {isConnected ? 'Google Drive Active' : 'Google Drive'}
                 </Typography>
-                <Chip
-                  icon={
-                    isConnected ? (
-                      <CheckCircle2 size={16} />
-                    ) : (
-                      <Globe size={16} />
-                    )
-                  }
-                  label={isConnected ? 'Google Drive Connected' : 'Not Connected'}
-                  color={isConnected ? 'success' : 'default'}
-                  variant={isConnected ? 'filled' : 'outlined'}
-                  size="small"
-                  sx={{ fontWeight: 700 }}
-                />
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  {isConnected
+                    ? formattedLastSync
+                      ? `Last backup: ${formattedLastSync}`
+                      : 'Sync ready'
+                    : 'Not connected'}
+                </Typography>
               </Box>
+            </Box>
+          </ListItem>
 
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {isConnected
-                  ? `Google Account active. Data sync enabled.${
-                      formattedLastSync ? ` Last backup: ${formattedLastSync}` : ''
-                    }`
-                  : 'Connect Google Drive to automate cloud backups and enable restore across devices.'}
-              </Typography>
+          <Divider />
 
-              <Stack spacing={1.5} sx={{ mt: 1 }}>
-                {!isConnected && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    disabled={isBusy}
-                    startIcon={
-                      isBusy ? (
-                        <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                      ) : (
-                        <LogIn size={18} />
-                      )
-                    }
-                    onClick={handleGoogleSignIn}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      borderRadius: '12px',
-                      justifyContent: 'flex-start',
-                      py: 1.2,
-                    }}
-                  >
-                    {isBusy ? 'Connecting...' : 'Sign in with Google'}
-                  </Button>
-                )}
+          {/* Connect / Disconnect Actions */}
+          {!isConnected ? (
+            <ListItemButton
+              disabled={isBusy}
+              onClick={handleGoogleSignIn}
+              sx={{ py: 1.5, px: 2, minHeight: 48, color: 'primary.main' }}
+            >
+              <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>
+                {isBusy ? <CircularProgress size={18} /> : <LogIn size={18} />}
+              </ListItemIcon>
+              <ListItemText
+                primary="Sign in with Google"
+                slotProps={{ primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } } }}
+              />
+            </ListItemButton>
+          ) : (
+            <>
+              <ListItemButton
+                disabled={isBusy}
+                onClick={handleGoogleExport}
+                sx={{ py: 1.5, px: 2, minHeight: 48 }}
+              >
+                <ListItemIcon sx={{ minWidth: 38, color: 'primary.main' }}>
+                  {isBusy ? <CircularProgress size={18} /> : <Upload size={18} />}
+                </ListItemIcon>
+                <ListItemText
+                  primary="Backup Now to Drive"
+                  slotProps={{ primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } } }}
+                />
+              </ListItemButton>
 
-                <Button
-                  variant={isConnected ? 'contained' : 'outlined'}
-                  color="primary"
-                  disabled={isBusy}
-                  startIcon={
-                    isBusy ? (
-                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <Upload size={18} />
-                    )
-                  }
-                  onClick={handleGoogleExport}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 700,
-                    borderRadius: '12px',
-                    justifyContent: 'flex-start',
-                    py: 1.2,
-                  }}
-                >
-                  {isBusy ? 'Working...' : 'Backup Data to Google Drive'}
-                </Button>
+              <Divider />
 
-                <Button
-                  variant="outlined"
-                  color="info"
-                  disabled={isBusy}
-                  startIcon={
-                    isBusy ? (
-                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      <Download size={18} />
-                    )
-                  }
-                  onClick={handleGoogleImport}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 700,
-                    borderRadius: '12px',
-                    justifyContent: 'flex-start',
-                    py: 1.2,
-                  }}
-                >
-                  Restore Latest Backup from Drive
-                </Button>
+              <ListItemButton
+                disabled={isBusy}
+                onClick={() => setConfirmImportOpen(true)}
+                sx={{ py: 1.5, px: 2, minHeight: 48 }}
+              >
+                <ListItemIcon sx={{ minWidth: 38, color: 'info.main' }}>
+                  <Download size={18} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Restore Latest Backup"
+                  slotProps={{ primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } } }}
+                />
+              </ListItemButton>
 
-                {isConnected && (
-                  <Button
-                    variant="text"
-                    color="error"
-                    disabled={isBusy}
-                    startIcon={<LogOut size={18} />}
-                    onClick={handleDisconnect}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      borderRadius: '12px',
-                      justifyContent: 'flex-start',
-                      py: 0.5,
-                      mt: 1,
-                    }}
-                  >
-                    Disconnect Google Account
-                  </Button>
-                )}
+              <Divider />
 
-                <Divider sx={{ my: 0.5 }} />
+              <ListItemButton
+                disabled={isBusy}
+                onClick={handleDisconnect}
+                sx={{ py: 1.5, px: 2, minHeight: 48, color: 'error.main' }}
+              >
+                <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>
+                  <LogOut size={18} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Disconnect Google Account"
+                  slotProps={{ primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } } }}
+                />
+              </ListItemButton>
+            </>
+          )}
 
-                <Button
-                  variant="outlined"
-                  color="inherit"
-                  startIcon={<Cloud size={18} />}
-                  onClick={handleAppleMockLogin}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 700,
-                    borderRadius: '12px',
-                    justifyContent: 'flex-start',
-                    py: 1.2,
-                  }}
-                >
-                  Sync with iCloud Keychain
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+          <Divider />
+
+          {/* iCloud Option */}
+          <ListItemButton
+            onClick={() => setICloudInfoOpen(true)}
+            sx={{ py: 1.5, px: 2, minHeight: 48 }}
+          >
+            <ListItemIcon sx={{ minWidth: 38, color: 'text.secondary' }}>
+              <Cloud size={18} />
+            </ListItemIcon>
+            <ListItemText
+              primary="iCloud Keychain Sync"
+              secondary="Coming soon"
+              slotProps={{
+                primary: { sx: { fontWeight: 600, fontSize: '0.95rem' } },
+                secondary: { sx: { fontSize: '0.75rem' } },
+              }}
+            />
+            <ChevronRight size={18} style={{ opacity: 0.3 }} />
+          </ListItemButton>
+        </List>
+      </GroupedSection>
+
+      {/* iOS Styled Confirmation Dialog for Database Restore */}
+      <Dialog
+        open={confirmImportOpen}
+        onClose={() => setConfirmImportOpen(false)}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: '18px',
+              p: 1,
+              maxWidth: 340,
+              backdropFilter: 'blur(20px)',
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
+          Restore Database?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ textAlign: 'center', fontSize: '0.9rem' }}>
+            Restoring from Google Drive will replace all current local records with the latest backup file.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: 'column', gap: 1, px: 2, pb: 1.5 }}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="error"
+            onClick={executeImport}
+            sx={{ borderRadius: '12px', py: 1, fontWeight: 700, textTransform: 'none' }}
+          >
+            Overwrite & Restore
+          </Button>
+          <Button
+            fullWidth
+            variant="text"
+            color="inherit"
+            onClick={() => setConfirmImportOpen(false)}
+            sx={{ borderRadius: '12px', py: 0.8, fontWeight: 600, textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Info Dialog for iCloud Sync */}
+      <Dialog
+        open={iCloudInfoOpen}
+        onClose={() => setICloudInfoOpen(false)}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: '18px',
+              p: 1,
+              maxWidth: 320,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
+          iCloud Sync
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ textAlign: 'center', fontSize: '0.9rem' }}>
+            iCloud Keychain & CloudKit auto-sync support will be available in an upcoming update.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', pb: 1 }}>
+          <Button
+            variant="contained"
+            onClick={() => setICloudInfoOpen(false)}
+            sx={{ borderRadius: '12px', px: 4, fontWeight: 700, textTransform: 'none' }}
+          >
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -1,21 +1,25 @@
-import React, { useState } from 'react';
-import { 
-  Box, 
-  Button, 
-  Card, 
-  CardContent, 
-  Typography, 
-  Grid,
-  IconButton, 
-  Dialog, 
-  DialogTitle, 
-  DialogContent, 
-  DialogActions, 
-  TextField, 
+// view/AccountsTab.tsx
+
+import React, { useState, useMemo } from 'react';
+import {
+  Box,
+  Button,
+  Paper,
+  Typography,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
   MenuItem,
   Chip,
+  Divider,
+  useTheme,
+  alpha,
+  Stack,
 } from '@mui/material';
-import { Trash2, Edit, PlusCircle, TrendingUp } from 'lucide-react';
+import { Trash2, Edit, Plus, TrendingUp, Wallet } from 'lucide-react';
 import { db, type Account, type AccountType, type InvestmentSubType, type CompoundingFrequency } from '@/db/schema';
 import { isInvestmentAccount, projectInvestment, resolveInvestmentSubType } from '@/services/investmentService';
 
@@ -29,7 +33,7 @@ const ACCOUNT_CATEGORIES: { label: string; types: AccountType[] }[] = [
   { label: 'Borrowing & Credit Lines', types: ['credit_card', 'debit_card'] },
   { label: 'Equities & Long Term Assets', types: ['mutual_fund', 'stock'] },
   { label: 'Deposits & Fixed Securities', types: ['fd_rd'] },
-  { label: 'National Schemes', types: ['scheme'] }, 
+  { label: 'National Schemes', types: ['scheme'] },
 ];
 
 const SUB_TYPE_OPTIONS: Record<string, { value: InvestmentSubType; label: string }[]> = {
@@ -62,7 +66,13 @@ const needsMonthlyInvestment = (subType: InvestmentSubType | ''): boolean =>
 const needsRate = (type: AccountType): boolean =>
   ['mutual_fund', 'stock', 'fd_rd', 'scheme'].includes(type);
 
+/** Helper to compute balance contribution (liabilities like credit cards subtract from total) */
+const getAccountSignedBalance = (acc: Account): number => {
+  return acc.type === 'credit_card' ? -acc.currentBalance : acc.currentBalance;
+};
+
 export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) => {
+  const theme = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
@@ -78,6 +88,11 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
   const [tenureMonths, setTenureMonths] = useState('');
   const [investmentSubType, setInvestmentSubType] = useState<InvestmentSubType | ''>('');
   const [compoundingFrequency, setCompoundingFrequency] = useState<CompoundingFrequency>('quarterly');
+
+  // Overall portfolio net worth calculation
+  const totalNetWorthCents = useMemo(() => {
+    return accounts.reduce((sum, acc) => sum + getAccountSignedBalance(acc), 0);
+  }, [accounts]);
 
   const resetForm = () => {
     setName('');
@@ -129,7 +144,8 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const balCents = Math.round(parseFloat(balance) * 100);
+    const parsedBal = parseFloat(balance);
+    const balCents = Math.round((isNaN(parsedBal) ? 0 : parsedBal) * 100);
 
     const data: Partial<Account> = {
       name,
@@ -144,17 +160,19 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
       data.investmentSubType = investmentSubType || undefined;
       data.tenureMonths = parseInt(tenureMonths) || undefined;
       data.startDate = startDate ? new Date(startDate).getTime() : undefined;
-      data.monthlyInvestment = monthlyInvestment
-        ? Math.round(parseFloat(monthlyInvestment) * 100)
+
+      const parsedMonthly = parseFloat(monthlyInvestment);
+      data.monthlyInvestment = !isNaN(parsedMonthly) && parsedMonthly > 0
+        ? Math.round(parsedMonthly * 100)
         : undefined;
     }
 
     if (needsRate(type)) {
       const rate = parseFloat(interest);
       if (['mutual_fund', 'stock'].includes(type)) {
-        data.expectedReturnRate = rate || undefined;
+        data.expectedReturnRate = !isNaN(rate) ? rate : undefined;
       } else {
-        data.interestRate = rate || undefined;
+        data.interestRate = !isNaN(rate) ? rate : undefined;
       }
     }
 
@@ -190,111 +208,375 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
   const showInvestmentFields = isInvestmentAccount(type);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6" sx={{ fontWeight: 800 }}>Asset Registers</Typography>
-        <Button variant="contained" startIcon={<PlusCircle size={18} />} onClick={openAddMode} sx={{ borderRadius: '12px', fontWeight: 700, textTransform: 'none' }}>
-          Add Account
-        </Button>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif',
+      }}
+    >
+      {/* Header & Net Worth Overview */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: '-0.5px',
+              color: 'text.primary',
+              fontSize: '28px',
+              lineHeight: '34px',
+            }}
+          >
+            Accounts
+          </Typography>
+          <Button
+            variant="contained"
+            disableElevation
+            startIcon={<Plus size={18} strokeWidth={2.5} />}
+            onClick={openAddMode}
+            sx={{
+              borderRadius: '20px',
+              fontWeight: 600,
+              textTransform: 'none',
+              px: 2,
+              py: 0.75,
+              fontSize: '15px',
+              bgcolor: 'primary.main',
+              boxShadow: 'none',
+              '&:hover': {
+                bgcolor: 'primary.dark',
+                boxShadow: 'none',
+              },
+            }}
+          >
+            Add Account
+          </Button>
+        </Box>
+
+        {/* Total Net Worth Card */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            borderRadius: '20px',
+            bgcolor: alpha(theme.palette.primary.main, 0.05),
+            border: '1px solid',
+            borderColor: alpha(theme.palette.primary.main, 0.12),
+            display: 'flex',
+            alignItems: 'center',
+            justify: 'space-between',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box
+              sx={{
+                width: 42,
+                height: 42,
+                borderRadius: '12px',
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Wallet size={22} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '13px', fontWeight: 500, color: 'text.secondary' }}>
+                Total Net Balance
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  letterSpacing: '-0.5px',
+                  color: totalNetWorthCents < 0 ? 'error.main' : 'text.primary',
+                }}
+              >
+                {format(totalNetWorthCents)}
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {/* Grouped iOS Inset Tables with Category Subtotals */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
         {ACCOUNT_CATEGORIES.map((cat, idx) => {
-          const categorizedAccounts = accounts.filter(acc => cat.types.includes(acc.type));
+          const categorizedAccounts = accounts.filter((acc) => cat.types.includes(acc.type));
           if (categorizedAccounts.length === 0) return null;
+
+          // Calculate subtotal for the current category
+          const categorySubtotalCents = categorizedAccounts.reduce(
+            (sum, acc) => sum + getAccountSignedBalance(acc),
+            0
+          );
 
           return (
             <Box key={idx}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {cat.label}
-              </Typography>
-              <Grid container spacing={3}>
-                {categorizedAccounts.map((acc) => {
+              {/* Group Section Header with Subtotal */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 1,
+                  px: 1.5,
+                }}
+              >
+                <Typography
+                  variant="overline"
+                  sx={{
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    letterSpacing: '0.2px',
+                    fontSize: '12px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {cat.label}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    color: categorySubtotalCents < 0 ? 'error.main' : 'text.secondary',
+                  }}
+                >
+                  {format(categorySubtotalCents)}
+                </Typography>
+              </Box>
+
+              {/* Inset Group Container */}
+              <Paper
+                elevation={0}
+                sx={{
+                  borderRadius: '20px',
+                  bgcolor: 'background.paper',
+                  border: '1px solid',
+                  borderColor: alpha(theme.palette.divider, 0.8),
+                  overflow: 'hidden',
+                }}
+              >
+                {categorizedAccounts.map((acc, accIdx) => {
                   const projection = projectInvestment(acc);
                   const subType = resolveInvestmentSubType(acc);
+                  const isLast = accIdx === categorizedAccounts.length - 1;
 
                   return (
-                    <Grid size={{ xs: 12, sm: 6 }} key={acc.id}>
-                      <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
-                        <CardContent sx={{ p: 2.5 }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <Box sx={{ flex: 1 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                <Typography variant="body1" sx={{ fontWeight: 800 }}>{acc.name}</Typography>
-                                {subType && (
-                                  <Chip label={SUB_TYPE_LABELS[subType]} size="small" sx={{ fontWeight: 700, fontSize: '0.65rem', height: 20 }} />
-                                )}
-                              </Box>
-                              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                                {acc.type.replace(/_/g, ' ').toUpperCase()}
-                                {(acc.interestRate ?? acc.expectedReturnRate)
-                                  ? ` | ${acc.expectedReturnRate ? 'Expected Return' : 'Interest'}: ${acc.interestRate ?? acc.expectedReturnRate}%`
-                                  : ''}
-                                {acc.repeatInvestmentDate ? ` | SIP Date: Day ${acc.repeatInvestmentDate}` : ''}
-                                {acc.tenureMonths ? ` | Tenure: ${acc.tenureMonths} mo` : ''}
+                    <React.Fragment key={acc.id}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          transition: 'background-color 0.15s ease',
+                          '&:hover': {
+                            bgcolor: alpha(theme.palette.action.hover, 0.04),
+                          },
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Box sx={{ flex: 1, pr: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                              <Typography
+                                sx={{
+                                  fontWeight: 600,
+                                  fontSize: '16px',
+                                  letterSpacing: '-0.3px',
+                                  color: 'text.primary',
+                                }}
+                              >
+                                {acc.name}
                               </Typography>
-
-                              {projection && (
-                                <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'action.hover', borderRadius: '10px' }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                                    <TrendingUp size={13} />
-                                    <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                      Projection
-                                    </Typography>
-                                  </Box>
-                                  <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
-                                    Maturity: <strong>{format(projection.maturityValueCents)}</strong>
-                                    {' · '}Interest/Gain: <strong>{format(projection.interestEarnedCents)}</strong>
-                                  </Typography>
-                                  {acc.startDate && projection.projectedValueCents > 0 && (
-                                    <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}>
-                                      Expected today: <strong>{format(projection.projectedValueCents)}</strong>
-                                      {' · '}Actual: <strong>{format(acc.currentBalance)}</strong>
-                                    </Typography>
-                                  )}
-                                </Box>
+                              {subType && (
+                                <Chip
+                                  label={SUB_TYPE_LABELS[subType]}
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 600,
+                                    fontSize: '11px',
+                                    height: '20px',
+                                    borderRadius: '6px',
+                                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                    color: 'primary.main',
+                                  }}
+                                />
                               )}
                             </Box>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, ml: 2 }}>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                                {format(acc.currentBalance)}
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                <IconButton size="small" onClick={() => openEditMode(acc)}><Edit size={15} /></IconButton>
-                                <IconButton size="small" color="error" onClick={() => handleDelete(acc.id)}><Trash2 size={15} /></IconButton>
+
+                            <Typography
+                              sx={{
+                                fontSize: '13px',
+                                color: 'text.secondary',
+                                fontWeight: 400,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {acc.type.replace(/_/g, ' ').toUpperCase()}
+                              {(acc.interestRate ?? acc.expectedReturnRate)
+                                ? ` · ${acc.expectedReturnRate ? 'Return' : 'Interest'}: ${acc.interestRate ?? acc.expectedReturnRate}%`
+                                : ''}
+                              {acc.repeatInvestmentDate ? ` · SIP: Day ${acc.repeatInvestmentDate}` : ''}
+                              {acc.tenureMonths ? ` · Tenure: ${acc.tenureMonths}m` : ''}
+                            </Typography>
+
+                            {/* Investment Projection Widget */}
+                            {projection && (
+                              <Box
+                                sx={{
+                                  mt: 1.5,
+                                  p: 1.5,
+                                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                                  borderRadius: '12px',
+                                  border: '1px solid',
+                                  borderColor: alpha(theme.palette.primary.main, 0.08),
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                                  <TrendingUp size={14} color={theme.palette.primary.main} />
+                                  <Typography
+                                    sx={{
+                                      fontWeight: 600,
+                                      fontSize: '11px',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.4px',
+                                      color: 'primary.main',
+                                    }}
+                                  >
+                                    Investment Projection
+                                  </Typography>
+                                </Box>
+                                <Typography
+                                  sx={{
+                                    fontSize: '12px',
+                                    color: 'text.secondary',
+                                    lineHeight: 1.5,
+                                  }}
+                                >
+                                  Maturity: <strong>{format(projection.maturityValueCents)}</strong>
+                                  {' · '}Gain: <strong>{format(projection.interestEarnedCents)}</strong>
+                                </Typography>
+                                {acc.startDate && projection.projectedValueCents > 0 && (
+                                  <Typography
+                                    sx={{
+                                      fontSize: '12px',
+                                      color: 'text.secondary',
+                                      mt: 0.25,
+                                    }}
+                                  >
+                                    Expected today: <strong>{format(projection.projectedValueCents)}</strong>
+                                    {' · '}Actual: <strong>{format(acc.currentBalance)}</strong>
+                                  </Typography>
+                                )}
                               </Box>
-                            </Box>
+                            )}
                           </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
+
+                          {/* Balance & iOS Quick Actions */}
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: '17px',
+                                letterSpacing: '-0.4px',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: acc.type === 'credit_card' ? 'error.main' : 'text.primary',
+                              }}
+                            >
+                              {acc.type === 'credit_card' ? `-${format(acc.currentBalance)}` : format(acc.currentBalance)}
+                            </Typography>
+
+                            <Stack direction="row" spacing={0.5}>
+                              <IconButton
+                                size="small"
+                                onClick={() => openEditMode(acc)}
+                                sx={{
+                                  width: 30,
+                                  height: 30,
+                                  bgcolor: alpha(theme.palette.action.hover, 0.06),
+                                  borderRadius: '50%',
+                                }}
+                              >
+                                <Edit size={14} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDelete(acc.id)}
+                                sx={{
+                                  width: 30,
+                                  height: 30,
+                                  bgcolor: alpha(theme.palette.error.main, 0.08),
+                                  color: 'error.main',
+                                  borderRadius: '50%',
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </IconButton>
+                            </Stack>
+                          </Box>
+                        </Box>
+                      </Box>
+                      {!isLast && <Divider sx={{ ml: 2, borderColor: alpha(theme.palette.divider, 0.5) }} />}
+                    </React.Fragment>
                   );
                 })}
-              </Grid>
+              </Paper>
             </Box>
           );
         })}
       </Box>
 
-      <Dialog open={isOpen} onClose={() => setIsOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight: 800 }}>{editingAccount ? 'Edit Account' : 'Add Account'}</DialogTitle>
+      {/* iOS Modal Form Dialog */}
+      <Dialog
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: '28px',
+              p: 1,
+              bgcolor: 'background.paper',
+              backgroundImage: 'none',
+            },
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            fontSize: '20px',
+            letterSpacing: '-0.4px',
+            textAlign: 'center',
+            pt: 2.5,
+            pb: 1,
+          }}
+        >
+          {editingAccount ? 'Edit Account' : 'Add Account'}
+        </DialogTitle>
         <Box component="form" onSubmit={handleSave}>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-            <TextField label="Account Name" value={name} onChange={(e) => setName(e.target.value)} required fullWidth />
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+            <TextField
+              label="Account Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              fullWidth
+              variant="outlined"
+              size="medium"
+            />
 
-            <TextField select label="Account Type" value={type} onChange={(e) => handleTypeChange(e.target.value as AccountType)} required fullWidth slotProps={{
-  select: {
-    MenuProps: {
-      sx: {
-        width: '100%',
-        '& .MuiMenuItem': {
-          px: { xs: 2, sm: 3 },
-          textAlign: 'center'
-        }
-      }
-    }
-  }
-}}>
+            <TextField
+              select
+              label="Account Type"
+              value={type}
+              onChange={(e) => handleTypeChange(e.target.value as AccountType)}
+              required
+              fullWidth
+            >
               <MenuItem value="cash">Cash</MenuItem>
               <MenuItem value="savings">Savings Account</MenuItem>
               <MenuItem value="wallet">Wallet</MenuItem>
@@ -307,31 +589,39 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
             </TextField>
 
             {subTypeOptions.length > 1 && (
-              <TextField select label="Investment Type" value={investmentSubType} onChange={(e) => setInvestmentSubType(e.target.value as InvestmentSubType)} required fullWidth slotProps={{
-  select: {
-    MenuProps: {
-      sx: {
-        width: '100%',
-        '& .MuiMenuItem': {
-          px: { xs: 2, sm: 3 },
-          textAlign: 'center'
-        }
-      }
-    }
-  }
-}}>
+              <TextField
+                select
+                label="Investment Type"
+                value={investmentSubType}
+                onChange={(e) => setInvestmentSubType(e.target.value as InvestmentSubType)}
+                required
+                fullWidth
+              >
                 {subTypeOptions.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
                 ))}
               </TextField>
             )}
 
-            <TextField label="Current Balance (₹)" type="number" value={balance} onChange={(e) => setBalance(e.target.value)} required fullWidth />
+            <TextField
+              label="Current Balance (₹)"
+              type="number"
+              value={balance}
+              onChange={(e) => setBalance(e.target.value)}
+              required
+              fullWidth
+            />
 
             {showInvestmentFields && (
               <>
                 <TextField
-                  label={['mutual_fund', 'stock'].includes(type) ? 'Expected Return (% p.a.)' : 'Interest Rate (% p.a.)'}
+                  label={
+                    ['mutual_fund', 'stock'].includes(type)
+                      ? 'Expected Return (% p.a.)'
+                      : 'Interest Rate (% p.a.)'
+                  }
                   type="number"
                   slotProps={{ htmlInput: { step: '0.01' } }}
                   value={interest}
@@ -339,29 +629,44 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
                   required
                   fullWidth
                 />
-                <TextField label="Tenure (months)" type="number" value={tenureMonths} onChange={(e) => setTenureMonths(e.target.value)} required fullWidth />
-                <TextField label="Start Date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
+                <TextField
+                  label="Tenure (months)"
+                  type="number"
+                  value={tenureMonths}
+                  onChange={(e) => setTenureMonths(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="Start Date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  fullWidth
+                />
               </>
             )}
 
             {showMonthly && (
-              <TextField label="Monthly Investment (₹)" type="number" value={monthlyInvestment} onChange={(e) => setMonthlyInvestment(e.target.value)} required fullWidth />
+              <TextField
+                label="Monthly Investment (₹)"
+                type="number"
+                value={monthlyInvestment}
+                onChange={(e) => setMonthlyInvestment(e.target.value)}
+                required
+                fullWidth
+              />
             )}
 
             {type === 'fd_rd' && investmentSubType === 'fd' && (
-              <TextField select label="Compounding" value={compoundingFrequency} onChange={(e) => setCompoundingFrequency(e.target.value as CompoundingFrequency)} fullWidth slotProps={{
-  select: {
-    MenuProps: {
-      sx: {
-        width: '100%',
-        '& .MuiMenuItem': {
-          px: { xs: 2, sm: 3 },
-          textAlign: 'center'
-        }
-      }
-    }
-  }
-}}>
+              <TextField
+                select
+                label="Compounding"
+                value={compoundingFrequency}
+                onChange={(e) => setCompoundingFrequency(e.target.value as CompoundingFrequency)}
+                fullWidth
+              >
                 <MenuItem value="monthly">Monthly</MenuItem>
                 <MenuItem value="quarterly">Quarterly (Indian banks)</MenuItem>
                 <MenuItem value="annually">Annually</MenuItem>
@@ -369,22 +674,72 @@ export const AccountsTab: React.FC<AccountsTabProps> = ({ accounts, format }) =>
             )}
 
             {showInvestmentFields && (
-              <TextField label="Repeat Investment Day (1-31)" type="number" value={repeatDay} onChange={(e) => setRepeatDay(e.target.value)} fullWidth />
+              <TextField
+                label="Repeat Investment Day (1-31)"
+                type="number"
+                value={repeatDay}
+                onChange={(e) => setRepeatDay(e.target.value)}
+                fullWidth
+              />
             )}
 
             {type === 'credit_card' && (
               <>
-                <TextField label="Statement Date (1-31)" type="number" value={ccStatement} onChange={(e) => setCcStatement(e.target.value)} required fullWidth />
-                <TextField label="Due Date (1-31)" type="number" value={ccDue} onChange={(e) => setCcDue(e.target.value)} required fullWidth />
+                <TextField
+                  label="Statement Date (1-31)"
+                  type="number"
+                  value={ccStatement}
+                  onChange={(e) => setCcStatement(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="Due Date (1-31)"
+                  type="number"
+                  value={ccDue}
+                  onChange={(e) => setCcDue(e.target.value)}
+                  required
+                  fullWidth
+                />
               </>
             )}
           </DialogContent>
-          <DialogActions sx={{ p: 3, gap: 1 }}>
-            <Button onClick={() => setIsOpen(false)} color="inherit">Cancel</Button>
-            <Button type="submit" variant="contained">Save</Button>
+
+          {/* iOS Action Buttons */}
+          <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1 }}>
+            <Button
+              onClick={() => setIsOpen(false)}
+              color="inherit"
+              fullWidth
+              sx={{
+                borderRadius: '14px',
+                py: 1.25,
+                fontWeight: 600,
+                textTransform: 'none',
+                bgcolor: alpha(theme.palette.action.hover, 0.08),
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disableElevation
+              fullWidth
+              sx={{
+                borderRadius: '14px',
+                py: 1.25,
+                fontWeight: 600,
+                textTransform: 'none',
+              }}
+            >
+              Save
+            </Button>
           </DialogActions>
         </Box>
       </Dialog>
     </Box>
   );
 };
+
+export default AccountsTab;

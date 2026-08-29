@@ -1,3 +1,4 @@
+import React from 'react';
 import { Box, Button, InputAdornment, TextField, Tooltip } from '@mui/material';
 import { FilterX, Calendar } from 'lucide-react';
 import type { Theme } from '@mui/material/styles';
@@ -20,6 +21,7 @@ const dateInputSx = {
     py: 1,
     px: 1,
     fontSize: { xs: '16px', sm: '0.875rem' },
+    cursor: 'pointer',
   },
 
   '& ::-webkit-calendar-picker-indicator': {
@@ -32,19 +34,27 @@ const dateInputSx = {
     opacity: 0.75,
     transition: 'opacity 0.2s ease, transform 0.15s ease',
 
+    '&:hover': {
+      opacity: 1,
+    },
     '&:active': {
       transform: 'scale(0.92)',
     },
   },
 };
 
-export const DateRangePicker = ({
+export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   startDate,
   endDate,
   setStartDate,
   setEndDate,
-}: DateRangePickerProps) => {
+}) => {
   const hasFilter = Boolean(startDate || endDate);
+
+  const handleClear = () => {
+    setStartDate('');
+    setEndDate('');
+  };
 
   return (
     <Box
@@ -61,7 +71,7 @@ export const DateRangePicker = ({
         WebkitTapHighlightColor: 'transparent',
       }}
     >
-      {/* Inputs container - neatly aligned side-by-side on iPhone */}
+      {/* Inputs container - side-by-side on mobile screens */}
       <Box
         sx={{
           display: 'flex',
@@ -79,6 +89,9 @@ export const DateRangePicker = ({
           onChange={(e) => setStartDate(e.target.value)}
           slotProps={{
             inputLabel: { shrink: true },
+            htmlInput: {
+              max: endDate || undefined, // Prevents picking start date after end date
+            },
             input: {
               startAdornment: (
                 <InputAdornment position="start" sx={{ mr: 0.5 }}>
@@ -99,6 +112,9 @@ export const DateRangePicker = ({
           onChange={(e) => setEndDate(e.target.value)}
           slotProps={{
             inputLabel: { shrink: true },
+            htmlInput: {
+              min: startDate || undefined, // Prevents picking end date before start date
+            },
             input: {
               startAdornment: (
                 <InputAdornment position="start" sx={{ mr: 0.5 }}>
@@ -118,10 +134,7 @@ export const DateRangePicker = ({
             color="error"
             variant="outlined"
             size="small"
-            onClick={() => {
-              setStartDate('');
-              setEndDate('');
-            }}
+            onClick={handleClear}
             startIcon={<FilterX size={16} />}
             sx={{
               alignSelf: { xs: 'stretch', sm: 'center' },
@@ -130,7 +143,16 @@ export const DateRangePicker = ({
               height: 44,
               minWidth: { xs: '100%', sm: 'auto' },
               borderColor: 'error.light',
+              whiteSpace: 'nowrap',
               WebkitTapHighlightColor: 'transparent',
+              transition: 'all 0.2s ease-in-out',
+              '&:hover': {
+                borderColor: 'error.main',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(244, 67, 54, 0.08)'
+                    : 'rgba(211, 47, 47, 0.04)',
+              },
             }}
           >
             Clear Filters

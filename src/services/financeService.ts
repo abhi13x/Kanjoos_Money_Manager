@@ -2,20 +2,24 @@ import { db, type Transaction } from '@/db/schema';
 import { fromCents } from '@/types/finance';
 import { GDriveSyncService } from '@/services/gdriveSync';
 
+const LIABILITY_TYPES = new Set(['credit_card', 'loan', 'mortgage', 'liability']);
+
 /**
- * Safely updates an account balance while guarding against undefined account IDs.
+ * Safely updates an account balance within an active Dexie transaction context.
  */
 const updateAccountBalance = async (accountId: string | undefined, delta: number): Promise<void> => {
   if (!accountId) return;
   const acc = await db.accounts.get(accountId);
-  if (acc && acc.id) {
+  if (acc) {
     const currentVal = acc.currentBalance ?? acc.initialBalance ?? 0;
-    await db.accounts.update(acc.id, { currentBalance: currentVal + delta });
+    // Guard against floating-point drift by rounding to nearest integer representation
+    const updatedVal = Math.round(currentVal + delta);
+    await db.accounts.update(accountId, { currentBalance: updatedVal });
   }
 };
 
 /**
- * Applies or reverts transaction balance impacts across affected accounts with full type safety.
+ * Applies or reverts transaction balance impacts across affected accounts.
  */
 const adjustTransactionBalances = async (
   tx: Partial<Transaction>,
@@ -28,10 +32,11 @@ const adjustTransactionBalances = async (
   } else if (tx.type === 'expense' && tx.accountId) {
     await updateAccountBalance(tx.accountId, -amount);
   } else if (tx.type === 'transfer' && tx.accountId) {
-    await updateAccountBalance(tx.accountId, -amount);
+    const updates: Promise<void>[] = [updateAccountBalance(tx.accountId, -amount)];
     if (tx.toAccountId) {
-      await updateAccountBalance(tx.toAccountId, amount);
+      updates.push(updateAccountBalance(tx.toAccountId, amount));
     }
+    await Promise.all(updates);
   }
 };
 
@@ -50,7 +55,7 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
 const triggerBackgroundSync = async (): Promise<void> => {
   try {
     const syncService = GDriveSyncService.getInstance();
-    if (syncService.hasValidAccessToken()) {
+    if (syncService.hasCachedSession()) {
       syncService.sync().catch(err => console.warn('Background sync failed:', err));
     }
   } catch (e) {
@@ -107,33 +112,35 @@ export const deleteTransactionWithSync = async (id: string): Promise<void> => {
 export const getAccountBalances = async () => {
   const accounts = await db.accounts.toArray();
 
-  const balances = accounts.map(account => ({
-    account,
-    balance: account.currentBalance ?? account.initialBalance ?? 0
-  }));
+  let assets = 0;
+  let liabilities = 0;
+  let retirementAssets = 0;
 
-  const assets = balances
-    .filter(b => ['cash', 'savings', 'wallet', 'debit_card', 'mutual_fund', 'stock', 'fd_rd', 'scheme'].includes(b.account.type ?? ''))
-    .reduce((sum, b) => sum + b.balance, 0);
+  for (const account of accounts) {
+    const balance = account.currentBalance ?? account.initialBalance ?? 0;
+    const type = account.type ?? '';
 
-  const liabilities = balances
-    .filter(b => b.account.type === 'credit_card')
-    .reduce((sum, b) => sum + b.balance, 0);
-
-  const retirementAssets = balances
-    .filter(b => b.account.type === 'scheme')
-    .reduce((sum, b) => sum + b.balance, 0);
-
-  const absoluteLiabilities = Math.abs(liabilities);
+    if (LIABILITY_TYPES.has(type)) {
+      liabilities += Math.abs(balance);
+    } else {
+      assets += balance;
+      if (type === 'scheme') {
+        retirementAssets += balance;
+      }
+    }
+  }
 
   return {
     assets,
-    liabilities: absoluteLiabilities,
+    liabilities,
     retirementAssets,
-    netWorth: assets - absoluteLiabilities,
+    netWorth: assets - liabilities,
   };
 };
 
+/**
+ * Calculates monthly expense totals per category (month index is 0-based: 0 = Jan, 11 = Dec).
+ */
 export const getMonthlyCategoryBreakdown = async (year: number, month: number) => {
   const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0).getTime();
   const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime();
@@ -148,7 +155,7 @@ export const getMonthlyCategoryBreakdown = async (year: number, month: number) =
 
   transactions.forEach(t => {
     const targetKey = t.categoryId || 'uncategorized';
-    breakdown[targetKey] = (breakdown[targetKey] || 0) + t.amount;
+    breakdown[targetKey] = Math.round((breakdown[targetKey] || 0) + (t.amount || 0));
   });
 
   return Object.entries(breakdown).map(([categoryId, total]) => ({
@@ -161,5 +168,6 @@ export const formatCurrency = (cents: number): string => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
+    maximumFractionDigits: 2,
   }).format(fromCents(cents));
 };

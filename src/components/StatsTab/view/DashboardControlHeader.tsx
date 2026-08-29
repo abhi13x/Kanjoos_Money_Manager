@@ -1,15 +1,5 @@
-import React from 'react';
-import {
-  Box,
-  Typography,
-  MenuItem,
-  TextField,
-  Paper,
-  ToggleButton,
-  ToggleButtonGroup,
-  useTheme,
-  alpha,
-} from '@mui/material';
+import React, { useMemo } from 'react';
+import { Box, Card, Typography, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { Filter } from 'lucide-react';
 import type { SortedCategoryOption } from '../features/CategoryManager';
 
@@ -21,14 +11,28 @@ interface DashboardControlHeaderProps {
   availablePeriods: string[];
   statType: 'expense' | 'income';
   handleStatTypeChange: (val: 'expense' | 'income') => void;
-  selectedCategory: string | number;
+  selectedCategory: string;
   setSelectedCategory: (val: string) => void;
   sortedCategoryOptions: SortedCategoryOption[];
 }
 
+const MONTHS = [
+  { value: '01', label: 'Jan' },
+  { value: '02', label: 'Feb' },
+  { value: '03', label: 'Mar' },
+  { value: '04', label: 'Apr' },
+  { value: '05', label: 'May' },
+  { value: '06', label: 'Jun' },
+  { value: '07', label: 'Jul' },
+  { value: '08', label: 'Aug' },
+  { value: '09', label: 'Sep' },
+  { value: '10', label: 'Oct' },
+  { value: '11', label: 'Nov' },
+  { value: '12', label: 'Dec' },
+];
+
 export const DashboardControlHeader: React.FC<DashboardControlHeaderProps> = ({
   groupBy,
-  onGroupByChange,
   effectivePeriod,
   onEffectivePeriodChange,
   availablePeriods,
@@ -38,229 +42,163 @@ export const DashboardControlHeader: React.FC<DashboardControlHeaderProps> = ({
   setSelectedCategory,
   sortedCategoryOptions,
 }) => {
-  const theme = useTheme();
+  // Extract unique sorted years from availablePeriods
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<string>();
+    availablePeriods.forEach((p) => {
+      const year = p.split('-')[0];
+      if (year && year.length === 4) {
+        yearsSet.add(year);
+      }
+    });
 
-  // MUI v9 Menu slot configuration
-  const menuSlotConfig = {
-    slotProps: {
-      paper: {
-        sx: {
-          borderRadius: '12px',
-          maxHeight: 300,
-          boxShadow: theme.shadows[4],
-          '& .MuiMenuItem-root': {
-            fontSize: '0.85rem',
-            py: 1,
-          },
-        },
-      },
-    },
+    if (yearsSet.size === 0) {
+      yearsSet.add(String(new Date().getFullYear()));
+    }
+
+    return Array.from(yearsSet).sort().reverse();
+  }, [availablePeriods]);
+
+  // Derive active year and month for month grouping ("YYYY-MM")
+  const [currentYear, currentMonth] = useMemo(() => {
+    if (effectivePeriod && effectivePeriod.includes('-')) {
+      const [y, m] = effectivePeriod.split('-');
+      return [y, m];
+    }
+    const fallback = availablePeriods[0] || `${new Date().getFullYear()}-01`;
+    const [fy, fm] = fallback.split('-');
+    return [fy, fm || '01'];
+  }, [effectivePeriod, availablePeriods]);
+
+  const handleMonthChange = (month: string) => {
+    const year = currentYear || availableYears[0] || String(new Date().getFullYear());
+    onEffectivePeriodChange(`${year}-${month}`);
   };
 
+  const handleMonthYearChange = (year: string) => {
+    const month = currentMonth || '01';
+    onEffectivePeriodChange(`${year}-${month}`);
+  };
+
+  // Standardize category selection value matching state ('all')
+  const safeSelectedCategory =
+    selectedCategory.toLowerCase() === 'all' || !selectedCategory ? 'all' : selectedCategory;
+
   return (
-    <Paper
-      elevation={0}
+    <Card
       sx={{
-        p: 2,
-        borderRadius: '18px',
+        p: 2.5,
+        borderRadius: '16px',
+        bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
-        bgcolor: 'background.paper',
-        paddingTop: `calc(16px + env(safe-area-inset-top, 0px))`,
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', md: 'center' },
-          gap: 2,
-        }}
-      >
-        <Typography
-          component="div"
-          variant="h6"
-          sx={{
-            fontWeight: 800,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.25,
-            fontSize: '1.1rem',
-            color: 'text.primary',
-          }}
-        >
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              p: 0.75,
-              borderRadius: '10px',
-              bgcolor: alpha(theme.palette.primary.main, 0.1),
-              color: 'primary.main',
-            }}
-          >
-            <Filter size={20} />
-          </Box>
+      {/* Header Title */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Filter size={20} />
+        <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>
           Analytics Dashboard
         </Typography>
+      </Box>
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 1.5,
-            width: { xs: '100%', md: 'auto' },
-          }}
-        >
-          <ToggleButtonGroup
-            size="small"
-            value={groupBy}
-            exclusive
-            onChange={(_, val) => val && onGroupByChange(val)}
-            sx={{
-              height: 40,
-              bgcolor: alpha(theme.palette.action.hover, 0.05),
-              borderRadius: '12px',
-              p: '3px',
-              border: '1px solid',
-              borderColor: 'divider',
-              '& .MuiToggleButton-root': {
-                border: 'none',
-                borderRadius: '9px',
-                px: 2,
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                color: 'text.secondary',
-                '&.Mui-selected': {
-                  bgcolor: 'background.paper',
-                  color: 'primary.main',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                  '&:hover': {
-                    bgcolor: 'background.paper',
-                  },
-                },
-              },
-            }}
-          >
-            <ToggleButton value="month">MONTH</ToggleButton>
-            <ToggleButton value="year">YEAR</ToggleButton>
-          </ToggleButtonGroup>
-
-          {/* Time Horizon Select */}
-          <TextField
-            select
-            size="small"
-            label="Time Horizon"
-            value={effectivePeriod}
-            onChange={(e) => onEffectivePeriodChange(e.target.value)}
-            sx={{
-              flex: { xs: 1, sm: 'initial' },
-              minWidth: { xs: '100%', sm: '150px' },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '12px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-              },
-            }}
-            slotProps={{
-              select: {
-                MenuProps: menuSlotConfig,
-              },
-            }}
-          >
-            <MenuItem value="all" sx={{ fontWeight: 600 }}>
-              All {groupBy === 'month' ? 'Months' : 'Years'}
-            </MenuItem>
-            {availablePeriods.map((pKey) => {
-              let display = pKey;
-              if (groupBy === 'month') {
-                const [y, m] = pKey.split('-');
-                display = `${new Date(Number(y), Number(m) - 1, 1).toLocaleString('default', {
-                  month: 'short',
-                })} ${y}`;
-              }
-              return (
-                <MenuItem key={pKey} value={pKey}>
-                  {display}
-                </MenuItem>
-              );
-            })}
-          </TextField>
-
-          {/* Stat Type Select */}
-          <TextField
-            select
-            size="small"
-            label="Type"
-            value={statType}
-            onChange={(e) => handleStatTypeChange(e.target.value as 'expense' | 'income')}
-            sx={{
-              flex: { xs: 1, sm: 'initial' },
-              minWidth: { xs: 'calc(50% - 6px)', sm: '120px' },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '12px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-              },
-            }}
-            slotProps={{
-              select: {
-                MenuProps: menuSlotConfig,
-              },
-            }}
-          >
-            <MenuItem value="expense" sx={{ fontWeight: 600 }}>
-              Expense
-            </MenuItem>
-            <MenuItem value="income" sx={{ fontWeight: 600 }}>
-              Income
-            </MenuItem>
-          </TextField>
-
-          {/* Category Select */}
-          <TextField
-            select
-            size="small"
-            label="Category"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            sx={{
-              flex: { xs: 1, sm: 'initial' },
-              minWidth: { xs: '100%', sm: '200px' },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '12px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-              },
-            }}
-            slotProps={{
-              select: {
-                MenuProps: menuSlotConfig,
-              },
-            }}
-          >
-            <MenuItem value="all" sx={{ fontWeight: 700 }}>
-              All Categories
-            </MenuItem>
-            {sortedCategoryOptions.map((cat) => (
-              <MenuItem
-                key={cat.id}
-                value={cat.id}
-                sx={
-                  cat.isSub
-                    ? { pl: 3.5, fontSize: '0.85rem', color: 'text.secondary' }
-                    : { fontWeight: 700 }
-                }
+      {/* Filter Dropdowns */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {/* Conditional Time Horizon Controls */}
+        {groupBy === 'month' ? (
+          /* Split Month & Year Dropdowns when grouped by Month */
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="month-select-label">Month</InputLabel>
+              <Select
+                labelId="month-select-label"
+                value={currentMonth}
+                label="Month"
+                onChange={(e) => handleMonthChange(e.target.value)}
               >
-                {cat.isSub ? `↳ ${cat.label}` : cat.label}
+                {MONTHS.map((m) => (
+                  <MenuItem key={m.value} value={m.value}>
+                    {m.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size="small">
+              <InputLabel id="year-select-label">Year</InputLabel>
+              <Select
+                labelId="year-select-label"
+                value={currentYear}
+                label="Year"
+                onChange={(e) => handleMonthYearChange(e.target.value)}
+              >
+                {availableYears.map((yr) => (
+                  <MenuItem key={yr} value={yr}>
+                    {yr}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        ) : (
+          /* Single Year Dropdown when grouped by Year */
+          <FormControl fullWidth size="small">
+            <InputLabel id="single-year-select-label">Year</InputLabel>
+            <Select
+              labelId="single-year-select-label"
+              value={
+                availableYears.includes(effectivePeriod)
+                  ? effectivePeriod
+                  : availableYears[0] || ''
+              }
+              label="Year"
+              onChange={(e) => onEffectivePeriodChange(e.target.value)}
+            >
+              {availableYears.map((yr) => (
+                <MenuItem key={yr} value={yr}>
+                  {yr}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {/* Type Select */}
+        <FormControl fullWidth size="small">
+          <InputLabel id="stat-type-label">Type</InputLabel>
+          <Select
+            labelId="stat-type-label"
+            value={statType}
+            label="Type"
+            onChange={(e) => handleStatTypeChange(e.target.value as 'expense' | 'income')}
+          >
+            <MenuItem value="expense">Expense</MenuItem>
+            <MenuItem value="income">Income</MenuItem>
+          </Select>
+        </FormControl>
+
+        {/* Category Select (Parent Categories Only) */}
+        <FormControl fullWidth size="small">
+          <InputLabel id="category-select-label">Category</InputLabel>
+          <Select
+            labelId="category-select-label"
+            value={safeSelectedCategory}
+            label="Category"
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <MenuItem value="all">All Categories</MenuItem>
+            {sortedCategoryOptions.map((cat) => (
+              <MenuItem key={cat.id} value={cat.id}>
+                {cat.label}
               </MenuItem>
             ))}
-          </TextField>
-        </Box>
+          </Select>
+        </FormControl>
       </Box>
-    </Paper>
+    </Card>
   );
 };

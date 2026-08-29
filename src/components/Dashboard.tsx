@@ -24,6 +24,7 @@ import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Fab from '@mui/material/Fab';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
+import { alpha } from '@mui/material/styles';
 
 import {
   Plus,
@@ -42,7 +43,6 @@ export const Dashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const { isMobile, isTablet } = useWindowSize();
 
-  // Dynamic state listener for reactive username updating
   const [username, setUsername] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(USERNAME_STORAGE_KEY) || 'Abhishek';
@@ -65,7 +65,6 @@ export const Dashboard: React.FC = () => {
     };
   }, []);
 
-  // Data queries
   const { defaultCurrency } = useSettings();
   const accounts = useLiveQuery(() => db.accounts.toArray()) || [];
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
@@ -85,7 +84,7 @@ export const Dashboard: React.FC = () => {
           bgcolor: 'background.default',
         }}
       >
-        <CircularProgress size={40} />
+        <CircularProgress size={36} thickness={4.5} />
       </Box>
     );
   }
@@ -98,17 +97,16 @@ export const Dashboard: React.FC = () => {
         minHeight: '100vh',
         bgcolor: 'background.default',
         color: 'text.primary',
-        transition: 'background-color 0.2s, color 0.2s',
-        // Bottom padding handles fixed navigation bar + iOS Home Indicator safe area
+        WebkitTapHighlightColor: 'transparent',
+        userSelect: 'none',
         pb: {
-          xs: 'calc(80px + env(safe-area-inset-bottom, 0px))',
-          md: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+          xs: 'calc(76px + env(safe-area-inset-bottom, 0px))',
+          md: 'calc(88px + env(safe-area-inset-bottom, 0px))',
         },
-        // Top padding offset for desktop fixed AppBar
         pt: isDesktop ? '72px' : 0,
       }}
     >
-      {/* Desktop Header - Fixed AppBar */}
+      {/* Desktop Header - Translucent iOS Glass Navbar */}
       {isDesktop && (
         <AppBar
           position="fixed"
@@ -118,7 +116,9 @@ export const Dashboard: React.FC = () => {
             left: 0,
             right: 0,
             zIndex: 1100,
-            bgcolor: 'background.paper',
+            bgcolor: (t) => alpha(t.palette.background.paper, 0.8),
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
             borderBottom: '1px solid',
             borderColor: 'divider',
           }}
@@ -136,14 +136,14 @@ export const Dashboard: React.FC = () => {
                 <Typography
                   variant="h5"
                   sx={{
-                    fontWeight: 900,
-                    letterSpacing: '-0.05em',
+                    fontWeight: 800,
+                    letterSpacing: '-0.03em',
                     color: 'primary.main',
                   }}
                 >
                   KANJOOS
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
                   Welcome back, {username}
                 </Typography>
               </Box>
@@ -152,39 +152,45 @@ export const Dashboard: React.FC = () => {
         </AppBar>
       )}
 
-      {/* Mobile/iOS Header - Integrated header with iOS Dynamic Island/Notch safe areas */}
+      {/* Mobile Header - Sticky Translucent Bar with Safe Areas */}
       {!isDesktop && (
         <Box
           component="header"
           sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1100,
             borderBottom: '1px solid',
             borderColor: 'divider',
-            bgcolor: 'background.paper',
-            // Accommodate iOS status bar / Dynamic island safe areas
-            pt: 'calc(16px + env(safe-area-inset-top, 0px))',
-            pb: 2,
+            bgcolor: (t) => alpha(t.palette.background.paper, 0.8),
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            pt: 'calc(12px + env(safe-area-inset-top, 0px))',
+            pb: 1.5,
           }}
         >
           <Container
             maxWidth="lg"
             sx={{
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
+              px: 2.5,
             }}
           >
             <Box>
               <Typography
                 variant="h5"
                 sx={{
-                  fontWeight: 900,
-                  letterSpacing: '-0.05em',
+                  fontWeight: 800,
+                  letterSpacing: '-0.04em',
                   color: 'primary.main',
+                  fontSize: '1.4rem',
                 }}
               >
                 KANJOOS
               </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, display: 'block' }}>
                 Welcome back, {username}
               </Typography>
             </Box>
@@ -193,7 +199,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* Main Tab Content */}
-      <Container maxWidth="lg" sx={{ py: isDesktop ? 5 : 3 }}>
+      <Container maxWidth="lg" sx={{ py: isDesktop ? 4 : 2.5, px: { xs: 2, sm: 3 } }}>
         {currentTab === 0 && (
           <SummaryTab
             accounts={accounts}
@@ -237,9 +243,9 @@ export const Dashboard: React.FC = () => {
         )}
       </Container>
 
-      {/* Bottom Navigation Bar - Fixed with iOS safe area padding */}
+      {/* Bottom Navigation Bar - iOS Frosted Glass Translucency */}
       <Paper
-        elevation={4}
+        elevation={0}
         sx={{
           position: 'fixed',
           bottom: 0,
@@ -249,8 +255,9 @@ export const Dashboard: React.FC = () => {
           borderTop: '1px solid',
           borderColor: 'divider',
           borderRadius: 0,
-          bgcolor: 'background.paper',
-          // Key iOS Safe Area fix for home indicator swipe bar
+          bgcolor: (t) => alpha(t.palette.background.paper, 0.85),
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           pb: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
@@ -264,26 +271,38 @@ export const Dashboard: React.FC = () => {
             }
           }}
           sx={{
-            height: 64,
-            bgcolor: 'background.paper',
+            height: 60,
+            bgcolor: 'transparent',
             '& .MuiBottomNavigationAction-root': {
               minWidth: 'auto',
-              py: 1,
+              py: 0.75,
+              color: 'text.secondary',
+              transition: 'color 0.15s ease-in-out',
+              '& .MuiBottomNavigationAction-label': {
+                fontSize: '0.68rem',
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                mt: 0.25,
+                '&.Mui-selected': {
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                },
+              },
               '&.Mui-selected': {
                 color: 'primary.main',
               },
             },
           }}
         >
-          <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} />} />
-          <BottomNavigationAction label="Transactions" icon={<ArrowRightLeft size={20} />} />
-          <BottomNavigationAction label="Stats" icon={<BarChart3 size={20} />} />
-          <BottomNavigationAction label="Accounts" icon={<Wallet size={20} />} />
-          <BottomNavigationAction label="Settings" icon={<Settings size={20} />} />
+          <BottomNavigationAction label="Summary" icon={<LayoutDashboard size={20} strokeWidth={2.2} />} />
+          <BottomNavigationAction label="Transactions" icon={<ArrowRightLeft size={20} strokeWidth={2.2} />} />
+          <BottomNavigationAction label="Stats" icon={<BarChart3 size={20} strokeWidth={2.2} />} />
+          <BottomNavigationAction label="Accounts" icon={<Wallet size={20} strokeWidth={2.2} />} />
+          <BottomNavigationAction label="Settings" icon={<Settings size={20} strokeWidth={2.2} />} />
         </BottomNavigation>
       </Paper>
 
-      {/* Floating Action Button (FAB) - Positioned dynamically above navigation bar & iOS safe area */}
+      {/* Floating Action Button (FAB) */}
       {(currentTab === 0 || currentTab === 1) && (
         <Fab
           color="primary"
@@ -291,16 +310,20 @@ export const Dashboard: React.FC = () => {
           onClick={() => setIsModalOpen(true)}
           sx={{
             position: 'fixed',
-            right: { xs: 16, sm: 24, md: 32 },
+            right: { xs: 20, sm: 28 },
             bottom: {
               xs: 'calc(76px + env(safe-area-inset-bottom, 0px))',
               sm: 'calc(84px + env(safe-area-inset-bottom, 0px))',
             },
-            boxShadow: 4,
+            boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.22)',
             zIndex: 1050,
+            '&:active': {
+              transform: 'scale(0.95)',
+            },
+            transition: 'transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out',
           }}
         >
-          <Plus size={24} />
+          <Plus size={24} strokeWidth={2.5} />
         </Fab>
       )}
 

@@ -1,13 +1,20 @@
 // types/finance.ts
 
-/**
- * Finance Domain Types
- * 
- * Note: All monetary values are stored as integers (cents/paise) to avoid 
- * floating-point precision errors.
- */
+import type { CompoundingFrequency, InvestmentSubType } from '../services/investmentFormulas';
 
-export type AccountType = 'checking' | 'savings' | 'credit' | 'cash' | 'investment' | 'retirement' | 'wallet';
+export type AccountType =
+  | 'checking'
+  | 'savings'
+  | 'credit'
+  | 'cash'
+  | 'investment'
+  | 'retirement'
+  | 'wallet'
+  | 'mutual_fund'
+  | 'stock'
+  | 'fd_rd'
+  | 'scheme';
+
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense';
 export type BudgetPeriod = 'monthly' | 'yearly';
@@ -20,6 +27,15 @@ export interface Account {
   initialBalance: number; // In cents/paise
   currentBalance: number; // Tracked balance for performance
   createdAt: number; // Timestamp
+
+  // Investment metadata fields
+  investmentSubType?: InvestmentSubType;
+  monthlyInvestment?: number;
+  interestRate?: number;
+  expectedReturnRate?: number;
+  tenureMonths?: number;
+  startDate?: number;
+  compoundingFrequency?: CompoundingFrequency;
 }
 
 export interface Transaction {
@@ -28,9 +44,9 @@ export interface Transaction {
   amount: number; // In cents/paise
   type: TransactionType;
   category: string;
-  note: string;
+  note?: string;
   date: number; // Timestamp
-  toAccountId?: string; // FIX: Changed from targetAccountId to toAccountId
+  toAccountId?: string;
 }
 
 export interface Category {
@@ -39,7 +55,7 @@ export interface Category {
   type: CategoryType;
   icon: string; // Lucide icon name
   color: string; // Hex or Tailwind color class
-  parentId?: string | null; // Optional ID of the parent category
+  parentId?: string;
 }
 
 export interface Budget {
@@ -49,27 +65,25 @@ export interface Budget {
   period: BudgetPeriod;
 }
 
-/**
- * Utility helpers for currency precision and localization
- */
+/** ISO currency codes that do not use fractional sub-units */
+const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'VND', 'CLP', 'PYG']);
 
-/**
- * Converts floating point input (e.g., 12.50) to integer cents (1250)
- */
-export const toCents = (amount: number): number => {
+/** Converts floating point input (e.g., 12.50) to integer cents (1250) */
+export const toCents = (amount: number, currency = 'INR'): number => {
+  if (ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase())) {
+    return Math.round(amount);
+  }
   return Math.round(amount * 100);
 };
 
-/**
- * Converts integer cents (1250) back to floating point (12.50)
- */
-export const fromCents = (cents: number): number => {
+/** Converts integer cents (1250) back to floating point (12.50) */
+export const fromCents = (cents: number, currency = 'INR'): number => {
+  if (ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase())) {
+    return cents;
+  }
   return cents / 100;
 };
 
-/**
- * Smart-maps ISO currency codes to standard native locales
- */
 const getFallbackLocale = (currency: string): string => {
   const code = currency.toUpperCase();
   const localeMap: Record<string, string> = {
@@ -84,16 +98,26 @@ const getFallbackLocale = (currency: string): string => {
   return localeMap[code] || 'en-US';
 };
 
-/**
- * Formats a cents/paise value dynamically based on currency code
- */
+/** Singleton instance cache to avoid heavy re-instantiation of Intl.NumberFormat */
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+/** Formats a cents/paise value dynamically based on currency code */
 export const formatCurrency = (cents: number, currency = 'INR', locale?: string): string => {
-  const targetLocale = locale || getFallbackLocale(currency);
-  
-  return new Intl.NumberFormat(targetLocale, {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(fromCents(cents));
+  const upperCurrency = currency.toUpperCase();
+  const targetLocale = locale || getFallbackLocale(upperCurrency);
+  const isZeroDecimal = ZERO_DECIMAL_CURRENCIES.has(upperCurrency);
+  const cacheKey = `${targetLocale}:${upperCurrency}`;
+
+  let formatter = formatterCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(targetLocale, {
+      style: 'currency',
+      currency: upperCurrency,
+      minimumFractionDigits: isZeroDecimal ? 0 : 2,
+      maximumFractionDigits: isZeroDecimal ? 0 : 2,
+    });
+    formatterCache.set(cacheKey, formatter);
+  }
+
+  return formatter.format(fromCents(cents, upperCurrency));
 };

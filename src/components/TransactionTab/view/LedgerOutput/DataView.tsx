@@ -1,152 +1,117 @@
-import type { FC } from 'react';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import Typography from '@mui/material/Typography';
+import React, { memo } from 'react';
+import { Box, Typography } from '@mui/material';
+import type { Transaction, Account } from '@/db/schema';
+import DayGroupCard from './DayGroupCard';
 
-/** Default currency formatter fallback converting cents to INR (₹) */
-const defaultFormat = (cents: number): string =>
-  (cents / 100).toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
-
-interface FormatProp {
-  format: (cents: number) => string;
+export interface CategoryItem {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  [key: string]: any;
 }
 
-const GroupTitle: FC<{ groupTitle: string }> = ({ groupTitle }) => {
-  return (
-    <Typography
-      variant="subtitle2"
-      sx={(theme) => ({
-        fontWeight: 800,
-        fontSize: 'clamp(0.85rem, 0.8rem + 0.3vw, 1rem)',
-        color: theme.vars?.palette.text.primary ?? 'text.primary',
-        letterSpacing: '0.2px',
-        whiteSpace: 'nowrap',
-      })}
-    >
-      {groupTitle}
-    </Typography>
-  );
+/**
+ * Helper: Resolves category names into "Parent / Child" format so TransactionRow
+ * can display Parent Category on top and Child Category underneath.
+ */
+export const getCategoryName = (
+  tx: any,
+  categories: CategoryItem[] = []
+): string => {
+  if (!tx) return 'Uncategorized';
+
+  // 1. Direct object hierarchy check on transaction
+  if (tx.category?.parent?.name) {
+    return `${tx.category.parent.name} / ${tx.category.name}`;
+  }
+  if (tx.parentCategoryName && tx.categoryName) {
+    return `${tx.parentCategoryName} / ${tx.categoryName}`;
+  }
+
+  // 2. Lookup via categoryId in categories list
+  const catId = tx.categoryId || tx.category_id;
+  if (!catId || !categories.length) {
+    return tx.categoryName || tx.category?.name || 'Uncategorized';
+  }
+
+  const currentCategory = categories.find((c) => c.id === catId);
+  if (!currentCategory) return 'Uncategorized';
+
+  // Check if currentCategory is a subcategory with a parentId
+  if (currentCategory.parentId) {
+    const parentCategory = categories.find((c) => c.id === currentCategory.parentId);
+    if (parentCategory) {
+      return `${parentCategory.name} / ${currentCategory.name}`;
+    }
+  }
+
+  return currentCategory.name;
 };
 
-const TotalIncome: FC<{ totalIncome: number } & FormatProp> = ({ totalIncome, format }) => {
-  return (
-    <Chip
-      label={`Income: ${format(totalIncome)}`}
-      size="small"
-      sx={(theme) => ({
-        fontWeight: 700,
-        fontSize: '0.7rem',
-        height: 24,
-        bgcolor: theme.vars?.palette.success[50] ?? 'success.50',
-        color: theme.vars?.palette.success.main ?? 'success.main',
-        border: '1px solid',
-        borderColor: theme.vars?.palette.success[200] ?? 'success.200',
-        flexShrink: 0,
-        WebkitTapHighlightColor: 'transparent',
-      })}
-    />
-  );
-};
-
-const TotalExpense: FC<{ totalExpense: number } & FormatProp> = ({ totalExpense, format }) => {
-  return (
-    <Chip
-      label={`Expense: ${format(totalExpense)}`}
-      size="small"
-      sx={(theme) => ({
-        fontWeight: 700,
-        fontSize: '0.7rem',
-        height: 24,
-        bgcolor: theme.vars?.palette.error[50] ?? 'error.50',
-        color: theme.vars?.palette.error.main ?? 'error.main',
-        border: '1px solid',
-        borderColor: theme.vars?.palette.error[200] ?? 'error.200',
-        flexShrink: 0,
-        WebkitTapHighlightColor: 'transparent',
-      })}
-    />
-  );
-};
-
-const NetCents: FC<{ netCents: number } & FormatProp> = ({ netCents, format }) => {
-  const isPositive = netCents > 0;
-  return (
-    <Chip
-      label={`Net: ${isPositive ? '+' : ''}${format(netCents)}`}
-      size="small"
-      sx={(theme) => ({
-        fontWeight: 700,
-        fontSize: '0.7rem',
-        height: 24,
-        bgcolor: isPositive
-          ? theme.vars?.palette.success[50] ?? 'success.50'
-          : theme.vars?.palette.error[50] ?? 'error.50',
-        color: isPositive
-          ? theme.vars?.palette.success.main ?? 'success.main'
-          : theme.vars?.palette.error.main ?? 'error.main',
-        border: '1px solid',
-        borderColor: isPositive
-          ? theme.vars?.palette.success[200] ?? 'success.200'
-          : theme.vars?.palette.error[200] ?? 'error.200',
-        flexShrink: 0,
-        WebkitTapHighlightColor: 'transparent',
-      })}
-    />
-  );
-};
-
-export interface GroupTotalAndTitleProps {
+export interface DayGroupData {
   groupTitle: string;
   totalIncome: number;
   totalExpense: number;
   netCents: number;
-  format?: (cents: number) => string;
+  transactions: Transaction[];
 }
 
-export const GroupTotalAndTitle: FC<GroupTotalAndTitleProps> = ({
-  groupTitle,
-  totalIncome,
-  totalExpense,
-  netCents,
-  format = defaultFormat,
-}) => {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        justifyContent: 'space-between',
-        alignItems: { xs: 'flex-start', sm: 'center' },
-        gap: 1,
-        mb: 1.25,
-        mt: 2,
-        px: 0.5,
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <GroupTitle groupTitle={groupTitle} />
+export interface DataViewProps {
+  groupedTransactions: DayGroupData[];
+  accounts?: Account[];
+  categories?: CategoryItem[];
+  format?: (cents: number) => string;
+  onDeleteTx?: (id: string) => void;
+  onEditTx?: (tx: Transaction) => void;
+}
 
-      {/* Horizontally scrollable chip container on narrow screens */}
+export const DataView: React.FC<DataViewProps> = memo(({
+  groupedTransactions = [],
+  accounts = [],
+  categories = [],
+  format,
+  onDeleteTx,
+  onEditTx,
+}) => {
+  if (!groupedTransactions || groupedTransactions.length === 0) {
+    return (
       <Box
         sx={{
-          display: 'flex',
-          gap: 0.75,
-          alignItems: 'center',
-          maxWidth: '100%',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          pb: 0.25, // prevents shadow/border clipping on scroll
-          '&::-webkit-scrollbar': { display: 'none' }, // clean look on iOS Safari
-          msOverflowStyle: 'none',
-          scrollbarWidth: 'none',
+          py: 6,
+          px: 2,
+          textAlign: 'center',
+          color: 'text.secondary',
         }}
       >
-        {totalIncome !== 0 && <TotalIncome totalIncome={totalIncome} format={format} />}
-        {totalExpense !== 0 && <TotalExpense totalExpense={totalExpense} format={format} />}
-        {netCents !== 0 && <NetCents netCents={netCents} format={format} />}
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          No transactions to display.
+        </Typography>
       </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {groupedTransactions.map((group) => (
+        <DayGroupCard
+          key={group.groupTitle}
+          groupTitle={group.groupTitle}
+          totalIncome={group.totalIncome}
+          totalExpense={group.totalExpense}
+          netCents={group.netCents}
+          transactions={group.transactions}
+          accounts={accounts}
+          categories={categories}
+          format={format}
+          getCategoryName={(tx) => getCategoryName(tx, categories)}
+          onDeleteTx={onDeleteTx}
+          onEditTx={onEditTx}
+        />
+      ))}
     </Box>
   );
-};
+});
+
+DataView.displayName = 'DataView';
+
+export default DataView;

@@ -19,15 +19,15 @@ export interface Account {
   id: string;
   name: string;
   type: AccountType;
-  initialBalance: number; // Stored in cents / smallest currency unit
-  currentBalance: number; // Stored in cents / smallest currency unit
+  initialBalance: number; // Stored in smallest currency unit (e.g. cents/paise)
+  currentBalance: number; // Stored in smallest currency unit
   currency: string;
   repeatInvestmentDate?: number; // Day of the month (1-31)
   interestRate?: number; // e.g. 7.1 for PPF, FD, RD
   expectedReturnRate?: number; // e.g. 12 for MF/stock CAGR
   statementDate?: number; // Day of the month (1-31)
   dueDate?: number; // Day of the month (1-31)
-  monthlyInvestment?: number; // In cents
+  monthlyInvestment?: number;
   startDate?: number; // Timestamp in ms
   tenureMonths?: number;
   investmentSubType?: InvestmentSubType;
@@ -41,14 +41,14 @@ export interface Category {
   name: string;
   type: 'expense' | 'income';
   parentId?: string | null;
-  parentCategoryId?: string | null; // Schema compatibility key
+  parentCategoryId?: string | null; // Compatibility key
   color?: string;
   icon?: string;
 }
 
 export interface Transaction {
   id: string;
-  amount: number; // Stored in cents
+  amount: number; // Stored in smallest currency unit
   date: number; // Unix timestamp in ms
   type: 'expense' | 'income' | 'transfer';
   categoryId?: string;
@@ -70,11 +70,13 @@ class KanjoosDatabase extends Dexie {
   constructor() {
     super('KanjoosDatabase');
 
-    // Schema versioning & compound indexing for high-performance chart queries
+    // Dexie index rules:
+    // 1. Only index fields queried via .where() or sorted via .orderBy()
+    // 2. Added compound indexes [accountId+date] & [toAccountId+date] for fast ledger queries
     this.version(1).stores({
-      accounts: 'id, name, type',
-      categories: 'id, name, type, parentId, parentCategoryId',
-      transactions: 'id, amount, type, accountId, toAccountId, categoryId, subCategoryId, date, isRecurring, [type+date], [categoryId+date]'
+      accounts: 'id, type',
+      categories: 'id, type, parentId, parentCategoryId',
+      transactions: 'id, date, accountId, toAccountId, categoryId, isRecurring, [type+date], [categoryId+date], [accountId+date], [toAccountId+date]'
     });
   }
 
@@ -107,7 +109,8 @@ class KanjoosDatabase extends Dexie {
       { id: 'cat-expense-other', name: 'Miscellaneous', type: 'expense', icon: 'more-horizontal', color: '#9CA3AF' }
     ];
 
-    await this.categories.bulkAdd(defaultCategories);
+    // bulkPut safely handles existing keys without throwing BulkError
+    await this.categories.bulkPut(defaultCategories);
   }
 }
 

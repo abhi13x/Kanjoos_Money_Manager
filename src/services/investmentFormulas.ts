@@ -45,7 +45,7 @@ const createResult = (
   };
 };
 
-/** Months elapsed between two timestamps (partial months count as full for projection). */
+/** Months elapsed between two timestamps. */
 export const getElapsedMonths = (startDate: number, asOf: number = Date.now()): number => {
   if (!startDate || isNaN(startDate)) return 0;
   const start = new Date(startDate);
@@ -79,7 +79,8 @@ export const calculateFD = (params: {
 
 /**
  * Recurring Deposit — RBI standard quarterly-compounding formula.
- * M = P × [((1 + R/400)^(4n) − 1) / (1 − (1 + R/400)^(−1/3))]
+ * M = P × [((1 + R/400)^(n/3) − 1) / (1 − (1 + R/400)^(−1/3))]
+ * where n = tenure in months (n/3 = total quarters)
  */
 export const calculateRD = (params: {
   monthlyDepositCents: number;
@@ -92,16 +93,24 @@ export const calculateRD = (params: {
     return createResult(0, 0, n);
   }
 
-  const quarterlyBase = 1 + R / 400;
-  const maturityValueCents =
-    P * (Math.pow(quarterlyBase, 4 * n) - 1) / (1 - Math.pow(quarterlyBase, -1 / 3));
   const totalInvestedCents = P * n;
+
+  if (R <= 0) {
+    return createResult(totalInvestedCents, totalInvestedCents, n);
+  }
+
+  const quarterlyBase = 1 + R / 400;
+  const totalQuarters = n / 3; // Fixed: divide by 3 instead of 4 * n
+  const numerator = Math.pow(quarterlyBase, totalQuarters) - 1;
+  const denominator = 1 - Math.pow(quarterlyBase, -1 / 3);
+
+  const maturityValueCents = P * (numerator / denominator);
 
   return createResult(maturityValueCents, totalInvestedCents, n);
 };
 
 /**
- * SIP / mutual fund — future value of annuity (deposit at start of each month).
+ * SIP / mutual fund — future value of annuity.
  * FV = P × [((1 + r_m)^n − 1) / r_m] × (1 + r_m)
  */
 export const calculateSIP = (params: {
@@ -163,7 +172,7 @@ export const calculateLumpSum = (params: {
 };
 
 /**
- * PPF — monthly deposits with annual compounding (simulated month-by-month).
+ * PPF — monthly deposits with monthly interest accrual and annual interest credit.
  */
 export const calculatePPF = (params: {
   monthlyDepositCents: number;
@@ -177,51 +186,42 @@ export const calculatePPF = (params: {
   }
 
   let balance = existingBalanceCents;
-  const rateFraction = annualRatePercent / 100;
+  let accruedInterestInYear = 0;
+  const monthlyRate = annualRatePercent / 12 / 100;
 
   for (let month = 1; month <= tenureMonths; month++) {
     balance += monthlyDepositCents;
+    accruedInterestInYear += balance * monthlyRate;
+
+    // Credit interest at end of each 12-month period
     if (month % 12 === 0) {
-      balance += balance * rateFraction;
+      balance += accruedInterestInYear;
+      accruedInterestInYear = 0;
     }
   }
 
-  const remainderMonths = tenureMonths % 12;
-  if (remainderMonths > 0) {
-    balance += balance * rateFraction * (remainderMonths / 12);
-  }
+  // Credit remaining accrued interest for partial year
+  balance += accruedInterestInYear;
 
   const totalInvestedCents = existingBalanceCents + monthlyDepositCents * tenureMonths;
   return createResult(balance, totalInvestedCents, tenureMonths);
 };
 
 /**
- * EPFO — monthly employee contribution with annual interest credit.
+ * EPFO — monthly employee contribution with monthly interest accrual and annual credit.
  */
 export const calculateEPFO = (params: {
   monthlyContributionCents: number;
   annualRatePercent: number;
   tenureMonths: number;
   existingBalanceCents?: number;
-}): InvestmentResult => {
-  const { monthlyContributionCents, annualRatePercent, tenureMonths, existingBalanceCents = 0 } = params;
-  if (tenureMonths <= 0) {
-    return createResult(existingBalanceCents, existingBalanceCents, 0);
-  }
-
-  let balance = existingBalanceCents;
-  const rateFraction = annualRatePercent / 100;
-
-  for (let month = 1; month <= tenureMonths; month++) {
-    balance += monthlyContributionCents;
-    if (month % 12 === 0) {
-      balance += balance * rateFraction;
-    }
-  }
-
-  const totalInvestedCents = existingBalanceCents + monthlyContributionCents * tenureMonths;
-  return createResult(balance, totalInvestedCents, tenureMonths);
-};
+}): InvestmentResult =>
+  calculatePPF({
+    monthlyDepositCents: params.monthlyContributionCents,
+    annualRatePercent: params.annualRatePercent,
+    tenureMonths: params.tenureMonths,
+    existingBalanceCents: params.existingBalanceCents,
+  });
 
 /** NPS — market-linked; modeled as SIP with expected return. */
 export const calculateNPS = calculateSIP;
@@ -238,10 +238,11 @@ export const calculateCAGR = (
   return Number.isFinite(cagr) ? cagr : 0;
 };
 
-/** Build a partial-tenure projection from a full maturity calculation. */
+/** Build a partial-tenure projection. */
 export const buildProjection = (
   fullResult: InvestmentResult,
-  elapsedMonths: number
+  elapsedMonths: number,
+  calculatorFn?: (months: number) => InvestmentResult
 ): InvestmentProjection => {
   const elapsed = Math.min(Math.max(0, elapsedMonths), fullResult.tenureMonths);
   const remainingMonths = fullResult.tenureMonths - elapsed;
@@ -255,6 +256,22 @@ export const buildProjection = (
     };
   }
 
+  // If a specific formula function is provided, run exact partial calculation
+  if (calculatorFn) {
+    const partialResult = calculatorFn(elapsed);
+    return {
+      ...fullResult,
+      projectedValueCents: partialResult.maturityValueCents,
+      remainingMonths,
+      annualizedReturnPercent: calculateCAGR(
+        partialResult.totalInvestedCents,
+        partialResult.maturityValueCents,
+        elapsed
+      ),
+    };
+  }
+
+  // Generic fallback heuristic for non-formula projections
   const progressRatio = elapsed / fullResult.tenureMonths;
   const investedSoFar = roundCents(fullResult.totalInvestedCents * progressRatio);
   const growthRatio =

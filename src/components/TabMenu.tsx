@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import { useTheme } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 
 export type DashboardView = 'daily' | 'weekly' | 'monthly' | 'calendar';
@@ -51,6 +52,8 @@ export const TabMenu: React.FC<TabMenuProps> = React.memo(({
   sx,
   disabled = false,
 }) => {
+  const theme = useTheme();
+
   const handleChange = useCallback(
     (_: React.SyntheticEvent, newValue: DashboardView) => {
       if (newValue && newValue !== value) {
@@ -60,13 +63,11 @@ export const TabMenu: React.FC<TabMenuProps> = React.memo(({
     [onChange, value]
   );
 
-  const activeTabKeys = useMemo(
-    () => new Set(tabs.map((tab) => tab.key)),
-    [tabs]
-  );
+  // Direct lookup avoids unnecessary object allocation for small arrays
+  const isValueValid = tabs.some((tab) => tab.key === value);
+  const safeValue = isValueValid ? value : tabs[0]?.key ?? 'daily';
 
-  // Fallback if current value is invalid or not found in configured tabs
-  const safeValue = activeTabKeys.has(value) ? value : tabs[0]?.key ?? 'daily';
+  const isDarkMode = theme.palette.mode === 'dark';
 
   return (
     <Tabs
@@ -76,15 +77,25 @@ export const TabMenu: React.FC<TabMenuProps> = React.memo(({
       aria-label="Dashboard view navigation"
       slotProps={{
         indicator: {
-          style: { transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' },
+          style: {
+            height: 'calc(100% - 4px)',
+            top: 2,
+            borderRadius: '7px',
+            backgroundColor: isDarkMode ? '#636366' : '#FFFFFF',
+            boxShadow: isDarkMode
+              ? '0 2px 6px rgba(0, 0, 0, 0.4)'
+              : '0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.04)',
+            transition: 'all 0.25s cubic-bezier(0.2, 0, 0, 1)',
+            zIndex: 0,
+          },
         },
       }}
       sx={{
-        borderBottom: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        minHeight: 48,
-        pb: 'calc(env(safe-area-inset-bottom, 0px))',
+        minHeight: 36,
+        p: '2px',
+        borderRadius: '9px',
+        bgcolor: isDarkMode ? 'rgba(118, 118, 128, 0.24)' : 'rgba(118, 118, 128, 0.12)',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
         ...sx,
       }}
     >
@@ -96,29 +107,28 @@ export const TabMenu: React.FC<TabMenuProps> = React.memo(({
           disabled={disabled || tab.disabled}
           {...getTabA11yProps(tab.key)}
           sx={{
-            fontWeight: 600,
-            fontSize: { xs: '0.75rem', sm: '0.8125rem' },
-            letterSpacing: '0.03em',
-            textTransform: 'uppercase',
+            minHeight: 32,
+            py: 0.5,
+            px: 1.5,
+            zIndex: 1,
+            fontWeight: 500,
+            fontSize: { xs: '0.78125rem', sm: '0.8125rem' },
+            letterSpacing: '-0.1px',
+            textTransform: 'none', // iOS standard Title Case
             color: 'text.secondary',
-            minHeight: 48,
-            py: 1.5,
-            transition: (theme) =>
-              theme.transitions.create(['color', 'font-weight', 'background-color'], {
-                duration: theme.transitions.duration.short,
-              }),
+            borderRadius: '7px',
+            transition: 'color 0.2s ease',
             '&:hover': {
               color: 'text.primary',
-              bgcolor: 'action.hover',
+              bgcolor: 'transparent',
             },
             '&.Mui-selected': {
-              color: 'primary.main',
-              fontWeight: 800,
+              color: 'text.primary',
+              fontWeight: 600,
             },
             '&.Mui-focusVisible': {
-              bgcolor: 'action.focus',
-              outline: (theme) => `2px solid ${theme.palette.primary.main}`,
-              outlineOffset: '-2px',
+              outline: `2px solid ${theme.palette.primary.main}`,
+              outlineOffset: '1px',
             },
           }}
         />
