@@ -58,6 +58,7 @@ export const AddCategoryModal: FC<AddCategoryModalProps> = ({
         name: name.trim(),
         type,
         parentId: parentId || undefined,
+        updatedAt: Date.now(), // ✅ added
       });
 
       setName('');

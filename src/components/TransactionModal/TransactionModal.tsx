@@ -59,14 +59,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setDescription(editTransaction.description ?? '');
       setIsRecurring(editTransaction.isRecurring ?? false);
 
-      // Safe type narrowing guard against database schema string types
       const rawInterval = editTransaction.repeatInterval as RepeatInterval;
       setRepeatInterval(VALID_INTERVALS.includes(rawInterval) ? rawInterval : 'monthly');
 
-      // Determine parent category and subcategory based on saved categoryId
       const targetCatId = editTransaction.categoryId ?? '';
       const foundCat = categories.find((c) => c.id === targetCatId);
-      
       if (foundCat?.parentId) {
         setCategoryId(foundCat.parentId);
         setSubCategoryId(foundCat.id);
@@ -89,13 +86,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   }, [isOpen, editTransaction, categories]);
 
-  // Filter root (parent) categories for the current type
   const parentCategories = useMemo(() => {
     if (type === 'transfer') return [];
     return categories.filter((cat) => cat.type === type && !cat.parentId);
   }, [categories, type]);
 
-  // Filter subcategories under the selected parent category
   const availableSubcategories = useMemo(() => {
     if (!categoryId || type === 'transfer') return [];
     return categories.filter((cat) => cat.parentId === categoryId);
@@ -126,7 +121,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     const amountCents = Math.round(parsedAmount * 100);
 
-    // Save subcategoryId if selected, otherwise fallback to root categoryId
     const finalCategoryId = subCategoryId || categoryId;
 
     const payload = {
@@ -140,6 +134,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       description: description.trim(),
       isRecurring,
       repeatInterval: isRecurring ? repeatInterval : ('none' as const),
+      updatedAt: Date.now(), // ✅ added to satisfy type
     };
 
     try {
@@ -183,14 +178,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
       <DialogContent sx={{ px: 2.5, py: 1 }}>
         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <SegmentTypeSwitcher type={type} handleTypeChange={handleTypeChange} />
 
-          {/* Segmented Type Switcher */}
-          <SegmentTypeSwitcher
-            type={type}
-            handleTypeChange={handleTypeChange}
-          />
-
-          {/* Amount Field */}
           <TextField
             label="Amount"
             type="number"
@@ -211,7 +200,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             }}
           />
 
-          {/* Account and Category Selectors */}
           <AccAndCategory
             type={type}
             accounts={accounts}
@@ -227,13 +215,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             setSubCategoryId={setSubCategoryId}
           />
 
-          {/* Date Picker */}
-          <DatePicker
-            date={date}
-            setDate={setDate}
-          />
+          <DatePicker date={date} setDate={setDate} />
 
-          {/* Notes & Description */}
           <TextField
             label="Short Note"
             placeholder="e.g., Grocery shopping, Uber ride"
@@ -263,7 +246,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             }}
           />
 
-          {/* Repeat Schedule Settings */}
           <Recurring
             isRecurring={isRecurring}
             setIsRecurring={setIsRecurring}
