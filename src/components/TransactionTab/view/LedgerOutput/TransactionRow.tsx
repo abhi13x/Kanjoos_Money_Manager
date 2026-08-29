@@ -179,11 +179,10 @@ export const TransactionHeader: React.FC<TransactionHeaderProps> = memo(({ title
             px: 1.25,
             py: 0.4,
             borderRadius: '8px',
-            bgcolor: (t) =>
-              alpha(
-                isNetPositive ? IOS_COLORS.accent : IOS_COLORS.expense,
-                0.18
-              ),
+            bgcolor: alpha(
+              isNetPositive ? IOS_COLORS.accent : IOS_COLORS.expense,
+              0.18
+            ),
           }}
         >
           <Typography
