@@ -1,4 +1,4 @@
-import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import type { FC } from 'react';
@@ -9,30 +9,41 @@ interface ViewTogglesProps {
 }
 
 export const ViewToggles: FC<ViewTogglesProps> = ({ value, onChange }) => {
-  /*
-   * View Toggles Component
-   * Controls transaction view mode (Daily/Monthly/Yearly)
-   */
   return (
-    <AppBar position="static" sx={{ 
-      bgcolor: 'background.paper', 
-      borderBottom: '1px solid', 
-      borderColor: 'divider', 
-      WebkitTapHighlightColor: 'transparent !important' 
-      }}>
-        <Tabs
-          value={value}
-          onChange={(_, newValue) => { onChange(newValue); }}
-          indicatorColor="secondary"
-          textColor="inherit"
-          variant="fullWidth"
-          aria-label="view mode tabs example"
-          sx={{ WebkitTapHighlightColor: 'transparent !important' }}
-          >
-            <Tab label="Daily" value={0} sx={{ WebkitTapHighlightColor: 'transparent !important' }} />
-            <Tab label="Monthly" value={1} sx={{ WebkitTapHighlightColor: 'transparent !important' }} />
-            <Tab label="Yearly" value={2} sx={{ WebkitTapHighlightColor: 'transparent !important' }} />
-        </Tabs>
-      </AppBar>
+    <Box
+      sx={{
+        bgcolor: 'background.paper',
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        overflow: 'hidden',
+      }}
+    >
+      <Tabs
+        value={value}
+        onChange={(_, newValue) => onChange(newValue)}
+        indicatorColor="primary"
+        textColor="primary"
+        variant="fullWidth"
+        aria-label="View mode navigation tabs"
+        sx={{
+          WebkitTapHighlightColor: 'transparent',
+          '& .MuiTab-root': {
+            fontWeight: 600,
+            textTransform: 'none',
+            color: 'text.secondary',
+            '&.Mui-selected': {
+              color: 'primary.main',
+            },
+          },
+        }}
+      >
+        <Tab label="Daily" value={0} />
+        <Tab label="Monthly" value={1} />
+        <Tab label="Yearly" value={2} />
+      </Tabs>
+    </Box>
   );
 };
+
+export default ViewToggles;

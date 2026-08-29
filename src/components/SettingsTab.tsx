@@ -18,6 +18,8 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import type { SxProps, Theme } from '@mui/material/styles';
 import {
   Globe,
@@ -30,6 +32,9 @@ import {
   ChevronRight,
   CheckCircle2,
   User,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useGDriveSession } from '@/hooks/useGDriveSession';
@@ -50,7 +55,7 @@ const DEFAULT_USERNAME = 'User';
  * and fluid layout structures.
  */
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories, sx }) => {
-  const { defaultCurrency, updateDefaultCurrency } = useSettings();
+  const { defaultCurrency, updateDefaultCurrency, themeMode, updateThemeMode } = useSettings();
 
   const {
     isConnected,
@@ -169,9 +174,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
 
   const formattedLastSync = lastSyncTime
     ? new Date(lastSyncTime).toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
     : null;
 
   /* ==========================================================
@@ -237,7 +242,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
         )}
       </Stack>
 
-      {/* Profile Section */}
+      {/* Profile & Preferences Section */}
       <GroupedSection title="Account & Preferences">
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
@@ -283,6 +288,63 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
             <MenuItem value="EUR">EUR (€) — Euro</MenuItem>
             <MenuItem value="GBP">GBP (£) — British Pound</MenuItem>
           </TextField>
+        </Box>
+      </GroupedSection>
+
+      {/* Appearance Section */}
+      <GroupedSection title="Appearance">
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '0.85rem' }}>
+            Theme
+          </Typography>
+          <ToggleButtonGroup
+            value={themeMode || 'auto'}
+            exclusive
+            onChange={(_, newMode) => {
+              if (newMode && updateThemeMode) {
+                updateThemeMode(newMode);
+              }
+            }}
+            fullWidth
+            size="small"
+            sx={{
+              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'),
+              p: 0.5,
+              borderRadius: '12px',
+              border: 'none',
+              '& .MuiToggleButtonGroup-grouped': {
+                border: 'none',
+                borderRadius: '8px !important',
+                py: 1,
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                textTransform: 'none',
+                color: 'text.secondary',
+                transition: 'all 0.2s ease',
+                '&.Mui-selected': {
+                  bgcolor: 'background.paper',
+                  color: 'text.primary',
+                  boxShadow: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? '0px 2px 6px rgba(0,0,0,0.4)'
+                      : '0px 2px 6px rgba(0,0,0,0.12)',
+                },
+              },
+            }}
+          >
+            <ToggleButton value="light">
+              <Sun size={16} style={{ marginRight: 6 }} />
+              Light
+            </ToggleButton>
+            <ToggleButton value="dark">
+              <Moon size={16} style={{ marginRight: 6 }} />
+              Dark
+            </ToggleButton>
+            <ToggleButton value="auto">
+              <Monitor size={16} style={{ marginRight: 6 }} />
+              Auto
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
       </GroupedSection>
 
