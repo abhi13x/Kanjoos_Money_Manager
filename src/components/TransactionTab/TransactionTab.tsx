@@ -34,6 +34,9 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  
+  // Track IDs pending or completed local deletion to ensure local UI updates immediately
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   const viewMode = VIEW_MODE_MAP[value] || 'daily';
 
@@ -43,6 +46,12 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
     const end = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999).getTime();
     return { monthStartMs: start, monthEndMs: end };
   }, [selectedYear, selectedMonth]);
+
+  // Filter out locally deleted IDs to prevent UI flashes during async deletion/sync
+  const activeTransactions = useMemo(() => {
+    if (deletedIds.size === 0) return transactions;
+    return transactions.filter((tx) => !deletedIds.has(String(tx.id)));
+  }, [transactions, deletedIds]);
 
   // Store full Category objects in Map to resolve parentId and subcategory relationships
   const categoryMap = useMemo(() => {
@@ -86,25 +95,37 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   );
 
   const filteredTx = useMemo(() => {
-    return filterAndSortTransactions(transactions, {
+    return filterAndSortTransactions(activeTransactions, {
       startDate: value === 0 ? monthStartMs : null,
       endDate: value === 0 ? monthEndMs : null,
     });
-  }, [transactions, value, monthStartMs, monthEndMs]);
+  }, [activeTransactions, value, monthStartMs, monthEndMs]);
 
   const groupedData = useMemo(() => {
     return GroupData({ value, filteredTx });
   }, [filteredTx, value]);
 
   const handleDelete = async () => {
-    if (deleteId) {
-      try {
-        await deleteTransactionWithSync(deleteId);
-      } catch (err) {
-        console.error('Failed to delete transaction:', err);
-        alert('Error deleting transaction. Please try again.');
-      }
-      setDeleteId(null);
+    if (!deleteId) return;
+
+    const targetId = deleteId;
+    
+    // 1. Optimistically hide from local list
+    setDeletedIds((prev) => new Set(prev).add(targetId));
+    setDeleteId(null);
+
+    try {
+      // 2. Execute atomic deletion + outbound sync push
+      await deleteTransactionWithSync(targetId);
+    } catch (err) {
+      console.error('Failed to delete transaction:', err);
+      // Rollback optimistic state if backend delete fails
+      setDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetId);
+        return next;
+      });
+      alert('Error deleting transaction. Please try again.');
     }
   };
 
