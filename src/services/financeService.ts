@@ -1,5 +1,4 @@
 import { db, type Transaction } from '@/db/schema';
-import { fromCents } from '@/types/finance';
 import { GDriveSyncService, recordDeletedTransactionId } from '@/services/gdriveSync';
 
 const LIABILITY_TYPES = new Set(['credit_card', 'loan', 'mortgage', 'liability']);
@@ -46,7 +45,9 @@ export const addTransaction = async (transactionData: Omit<Transaction, 'id'>): 
 const triggerOutboundSync = async (): Promise<void> => {
   try {
     const syncService = GDriveSyncService.getInstance();
-    if (syncService.hasCachedSession()) {
+    // Use stored credentials (not just a currently-valid token) so a sync is still
+    // attempted, and silently renewed, if the access token expired since last use
+    if (syncService.hasStoredCredentials()) {
       // Full bidirectional sync – pulls remote, merges, then pushes
       await syncService.sync();
     }
@@ -99,6 +100,32 @@ export const deleteTransactionWithSync = async (id: string): Promise<void> => {
   triggerOutboundSync();
 };
 
+// Cascade-deletes any transactions referencing this account so none are left dangling.
+export const deleteAccount = async (accountId: string): Promise<void> => {
+  return await db.transaction('rw', [db.transactions, db.accounts], async () => {
+    const linkedTransactions = await db.transactions
+      .filter(t => t.accountId === accountId || t.toAccountId === accountId)
+      .toArray();
+
+    for (const tx of linkedTransactions) {
+      await db.transactions.delete(tx.id);
+      recordDeletedTransactionId(tx.id);
+    }
+
+    await db.accounts.delete(accountId);
+    recordDeletedTransactionId(accountId);
+  });
+};
+
+export const deleteAccountWithSync = async (accountId: string): Promise<void> => {
+  await deleteAccount(accountId);
+  triggerOutboundSync();
+};
+
+export const countTransactionsForAccount = async (accountId: string): Promise<number> => {
+  return db.transactions.filter(t => t.accountId === accountId || t.toAccountId === accountId).count();
+};
+
 export const getAccountBalances = async () => {
   const accounts = await db.accounts.toArray();
 
@@ -146,10 +173,4 @@ export const getMonthlyCategoryBreakdown = async (year: number, month: number) =
   }));
 };
 
-export const formatCurrency = (cents: number): string => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(fromCents(cents));
-};
+export { formatCurrency } from '@/types/finance';

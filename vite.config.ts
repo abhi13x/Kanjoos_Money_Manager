@@ -36,15 +36,16 @@ export default defineConfig(({ mode }) => ({
         display: 'standalone',
         icons: [
           {
-            src: 'money-manager\\src\\assets\\kanjoos_icon.png',
+            src: 'kanjoos_icon.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any maskable',
           },
           {
-            src: 'money-manager\\src\\assets\\kanjoos_icon.png',
+            src: 'kanjoos_icon.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any maskable',
           },
         ],
       },

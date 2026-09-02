@@ -10,10 +10,10 @@ import { getTimelineData } from "./features/Chart/Timeline";
 import { getPeriodicData } from "./features/Chart/Periodic";
 import { getLineYAxis } from "./features/Axis";
 import { useControlState } from "./features/ControlState";
-import { DashboardControlHeader } from "./view/DashboardControlHeader";
-import { CategoryBreakdownChart } from "./view/CategoryBreakdownChart";
-import { TemporalVolumesChart } from "./view/TemporalVolumesChart";
-import { TimelineChart } from "./view/TimelineChart";
+import { DashboardControlHeader } from "./views/DashboardControlHeader";
+import { CategoryBreakdownChart } from "./views/CategoryBreakdownChart";
+import { TemporalVolumesChart } from "./views/TemporalVolumesChart";
+import { TimelineChart } from "./views/TimelineChart";
 import {
   useBaseTransactions,
   useAvailablePeriods,
@@ -79,15 +79,15 @@ export const StatsTab: React.FC<StatsTabProps> = ({
   );
 
   const lineYAxis = useMemo(
-    () => getLineYAxis(transactions, selectedCategory, groupBy, effectivePeriod, categories),
-    [transactions, selectedCategory, groupBy, effectivePeriod, categories]
+    () => getLineYAxis(baseTx, selectedCategory, groupBy, effectivePeriod, categories),
+    [baseTx, selectedCategory, groupBy, effectivePeriod, categories]
   );
 
   const selectedCategoryName = getSelectedCategoryName(selectedCategory, categories);
 
   const periodicData = useMemo(
-    () => getPeriodicData(transactions, selectedCategory, groupBy, categories),
-    [transactions, selectedCategory, groupBy, categories]
+    () => getPeriodicData(baseTx, selectedCategory, groupBy, categories),
+    [baseTx, selectedCategory, groupBy, categories]
   );
 
   return (
@@ -154,7 +154,6 @@ export const StatsTab: React.FC<StatsTabProps> = ({
       {/* Dashboard Control Header */}
       <DashboardControlHeader
         groupBy={groupBy}
-        onGroupByChange={setHandleGroupByChange}
         effectivePeriod={effectivePeriod}
         onEffectivePeriodChange={(val: string) => setSelectedPeriod(val)}
         availablePeriods={availablePeriods}

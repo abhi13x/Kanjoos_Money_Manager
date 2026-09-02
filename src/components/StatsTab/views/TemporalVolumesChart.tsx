@@ -7,6 +7,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { BarChart3 } from 'lucide-react';
+import { formatCompact } from '../features/Helper';
 
 export interface PeriodicDataPoint {
   label: string;
@@ -30,14 +31,6 @@ export interface TemporalVolumesChartProps {
   setHoveredBarIndex?: (idx: number | null) => void;
   format?: (cents: number) => string;
 }
-
-/** Compact currency formatter for Y-axis labels (e.g. 1000000 cents -> ₹10k) */
-const formatCompact = (cents: number): string => {
-  const amount = cents / 100;
-  if (amount >= 1000000) return `₹${(amount / 1000000).toFixed(1)}M`;
-  if (amount >= 1000) return `₹${(amount / 1000).toFixed(0)}k`;
-  return `₹${amount}`;
-};
 
 /** Default currency formatter if standard format prop isn't passed */
 const defaultFormat = (cents: number): string => `₹${(cents / 100).toFixed(2)}`;

@@ -25,7 +25,7 @@ export interface TabMenuProps {
   disabled?: boolean;
 }
 
-export const DEFAULT_TABS: readonly TabConfig[] = [
+const DEFAULT_TABS: readonly TabConfig[] = [
   { label: 'Daily', key: 'daily' },
   { label: 'Calendar', key: 'calendar' },
   { label: 'Weekly', key: 'weekly' },

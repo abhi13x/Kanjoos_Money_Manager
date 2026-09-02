@@ -51,23 +51,6 @@ export const useEffectivePeriod = (
 };
 
 /**
- * Calculates a sorted list of all years present in the transaction data, including current year.
- */
-export const useAvailableYears = (transactions: Transaction[]) => {
-  const currentDate = new Date();
-  return useMemo(() => {
-    const yearsSet = new Set<number>();
-    yearsSet.add(currentDate.getFullYear());
-    transactions.forEach((tx) => {
-      if (tx.date) {
-        yearsSet.add(new Date(tx.date).getFullYear());
-      }
-    });
-    return Array.from(yearsSet).sort((a, b) => b - a);
-  }, [transactions]);
-};
-
-/**
  * Resolves a selected category ID into a set of matching IDs.
  * If a parent category is selected, returns the parent ID along with all child subcategory IDs.
  */

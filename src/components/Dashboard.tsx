@@ -9,7 +9,7 @@ import { formatCurrency } from '@/types/finance';
 import { SummaryTab } from './SummaryTab';
 import { TransactionsTab } from './TransactionTab/TransactionTab';
 import { StatsTab } from './StatsTab/StatsTab';
-import { AccountsTab } from './AccountsTab';
+import { AccountsTab } from './AccountsTab/AccountsTab';
 import { SettingsTab } from './SettingsTab';
 import { CategoriesTab } from './CategoriesTab/CategoriesTab';
 import TransactionModal from './TransactionModal/TransactionModal';
@@ -102,7 +102,7 @@ export const Dashboard: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          bgcolor: '#F2F2F7',
+          bgcolor: (t) => t.palette.background.default,
         }}
       >
         <CircularProgress size={36} thickness={4.5} />
@@ -132,8 +132,8 @@ export const Dashboard: React.FC = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        bgcolor: '#F2F2F7',
-        color: '#000000',
+        bgcolor: (t) => t.palette.background.default,
+        color: (t) => t.palette.text.primary,
         ...iOSFont,
         WebkitTapHighlightColor: 'transparent',
         userSelect: 'none',

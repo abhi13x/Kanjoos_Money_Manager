@@ -26,6 +26,41 @@ const iOSFont = {
   fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Helvetica, Arial, sans-serif',
 };
 
+const GroupedSection: React.FC<{ title?: string; children: React.ReactNode }> = ({
+  title,
+  children,
+}) => (
+  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+    {title && (
+      <Typography
+        variant="caption"
+        sx={{
+          px: 1.5,
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+          color: '#8E8E93',
+          fontSize: 13,
+          ...iOSFont,
+        }}
+      >
+        {title}
+      </Typography>
+    )}
+    <Box
+      sx={(theme) => ({
+        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        border: '1px solid',
+        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
+      })}
+    >
+      {children}
+    </Box>
+  </Box>
+);
+
 export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories, sx }) => {
   const { defaultCurrency, updateDefaultCurrency, themeMode, updateThemeMode } = useSettings();
   const [view, setView] = useState<'main' | 'drive'>('main');
@@ -56,41 +91,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ onNavigateToCategories
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
-
-  const GroupedSection: React.FC<{ title?: string; children: React.ReactNode }> = ({
-    title,
-    children,
-  }) => (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-      {title && (
-        <Typography
-          variant="caption"
-          sx={{
-            px: 1.5,
-            textTransform: 'uppercase',
-            fontWeight: 600,
-            letterSpacing: '0.05em',
-            color: '#8E8E93',
-            fontSize: 13,
-            ...iOSFont,
-          }}
-        >
-          {title}
-        </Typography>
-      )}
-      <Box
-        sx={(theme) => ({
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          border: '1px solid',
-          borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(60,60,67,0.08)',
-        })}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
 
   if (view === 'drive') {
     return (

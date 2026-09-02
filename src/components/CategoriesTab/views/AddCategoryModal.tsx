@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect, useMemo } from 'react';
+import { type FC, useState, useMemo } from 'react';
 import type { Category } from '@/db/schema';
 import { db } from '@/db/schema';
 import { 
@@ -33,13 +33,16 @@ export const AddCategoryModal: FC<AddCategoryModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState<string>('');
+  const [wasOpen, setWasOpen] = useState(open);
 
-  useEffect(() => {
+  // Reset form fields whenever the modal transitions from closed to open (derived-state-during-render)
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setParentId(parentCategory?.id ?? '');
       setName('');
     }
-  }, [parentCategory, open]);
+  }
 
   // Filter root categories of matching type for optional parent selection
   const availableParents = useMemo(() => {
@@ -128,7 +131,8 @@ export const AddCategoryModal: FC<AddCategoryModalProps> = ({
             bgcolor: 'action.hover',
             '&:hover': { bgcolor: 'action.selected' },
             borderRadius: '50%',
-            p: 0.75
+            width: 44,
+            height: 44,
           }}
         >
           <X size={18} />

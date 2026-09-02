@@ -58,7 +58,7 @@ export const MainCategory: React.FC<{
                       e.stopPropagation();
                       handleDeleteCategory(root.id);
                     }}
-                    sx={{ p: 0.5 }}
+                    sx={{ width: 44, height: 44 }}
                   >
                     <MinusCircle size={20} color="#F44336" />
                   </IconButton>
@@ -85,10 +85,11 @@ export const MainCategory: React.FC<{
                   <IconButton 
                   size="small" 
                   onClick={() => setEditingCategory(root)}
+                  sx={{ width: 44, height: 44 }}
                   >
                     <Pencil size={18} color="#9E9E9E" />
                   </IconButton>
-                  <IconButton size="small" sx={{ cursor: 'grab' }}>
+                  <IconButton size="small" sx={{ cursor: 'grab', width: 44, height: 44 }}>
                     <GripVertical size={18} color="#CCCCCC" />
                   </IconButton>
                 </Stack>

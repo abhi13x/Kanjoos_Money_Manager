@@ -1,45 +1,28 @@
 import React, { memo } from 'react';
 import { Box, Typography } from '@mui/material';
-import type { Transaction, Account } from '@/db/schema';
+import type { Transaction, Account, Category } from '@/db/schema';
 import DayGroupCard from './DayGroupCard';
-
-export interface CategoryItem {
-  id: string;
-  name: string;
-  parentId?: string | null;
-  [key: string]: any;
-}
 
 /**
  * Helper: Resolves category names into "Parent / Child" format so TransactionRow
  * can display Parent Category on top and Child Category underneath.
  */
-export const getCategoryName = (
-  tx: any,
-  categories: CategoryItem[] = []
+const getCategoryName = (
+  tx: Transaction | null | undefined,
+  categories: Category[] = []
 ): string => {
   if (!tx) return 'Uncategorized';
 
-  // 1. Direct object hierarchy check on transaction
-  if (tx.category?.parent?.name) {
-    return `${tx.category.parent.name} / ${tx.category.name}`;
-  }
-  if (tx.parentCategoryName && tx.categoryName) {
-    return `${tx.parentCategoryName} / ${tx.categoryName}`;
-  }
-
-  // 2. Lookup via categoryId in categories list
-  const catId = tx.categoryId || tx.category_id;
-  if (!catId || !categories.length) {
-    return tx.categoryName || tx.category?.name || 'Uncategorized';
-  }
+  const catId = tx.categoryId;
+  if (!catId || !categories.length) return 'Uncategorized';
 
   const currentCategory = categories.find((c) => c.id === catId);
   if (!currentCategory) return 'Uncategorized';
 
   // Check if currentCategory is a subcategory with a parentId
-  if (currentCategory.parentId) {
-    const parentCategory = categories.find((c) => c.id === currentCategory.parentId);
+  const parentId = currentCategory.parentId;
+  if (parentId) {
+    const parentCategory = categories.find((c) => c.id === parentId);
     if (parentCategory) {
       return `${parentCategory.name} / ${currentCategory.name}`;
     }
@@ -59,7 +42,7 @@ export interface DayGroupData {
 export interface DataViewProps {
   groupedTransactions: DayGroupData[];
   accounts?: Account[];
-  categories?: CategoryItem[];
+  categories?: Category[];
   format?: (cents: number) => string;
   onDeleteTx?: (id: string) => void;
   onEditTx?: (tx: Transaction) => void;

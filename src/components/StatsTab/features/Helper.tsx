@@ -2,7 +2,7 @@ import type { Transaction, Category } from '@/db/schema';
 
 // Helper: Resolve parent category ID across database schemas
 export const getParentId = (cat: Category): string | null => {
-  return (cat as any).parentId ?? (cat as any).parentCategoryId ?? null;
+  return cat.parentId ?? null;
 };
 
 // Helper: Get target category ID + all sub-category IDs linked to it
@@ -29,7 +29,7 @@ export const transactionMatchesCategory = (
   
   // Safely assign optional string fields with fallback to empty string
   const txCatId: string = tx.categoryId ?? '';
-  const txSubCatId: string = (tx as any).subCategoryId ?? '';
+  const txSubCatId: string = tx.subCategoryId ?? '';
 
   if (txCatId && familyIds.has(txCatId)) return true;
   if (txSubCatId && familyIds.has(txSubCatId)) return true;
@@ -47,11 +47,11 @@ export const getNiceYAxis = (maxValue: number, targetTicks = 4) => {
   const magnitude = Math.pow(10, Math.floor(Math.log10(rawInterval)));
   const norm = rawInterval / magnitude;
 
-  let niceStep = magnitude;
+  let niceStep: number;
   if (norm > 5) niceStep = 10 * magnitude;
   else if (norm > 2.5) niceStep = 5 * magnitude;
   else if (norm > 1.25) niceStep = 2 * magnitude;
-  else niceStep = 1 * magnitude;
+  else niceStep = magnitude;
 
   const maxTick = Math.ceil(maxValue / niceStep) * niceStep;
   const ticks: number[] = [];
@@ -62,3 +62,11 @@ export const getNiceYAxis = (maxValue: number, targetTicks = 4) => {
 
   return { ticks, max: maxTick || 1 };
 }
+
+/** Compact currency formatter for chart axis labels (e.g. 1000000 cents -> ₹10k) */
+export const formatCompact = (cents: number): string => {
+  const amount = cents / 100;
+  if (amount >= 1000000) return `₹${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `₹${(amount / 1000).toFixed(0)}k`;
+  return `₹${amount}`;
+};

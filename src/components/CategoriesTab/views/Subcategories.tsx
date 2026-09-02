@@ -99,7 +99,8 @@ export const Subcategories: React.FC<SubcategoriesProps> = ({
                   onClick={() => handleDeleteCategory(sub.id)}
                   sx={{ 
                     color: 'error.main',
-                    p: 0.75,
+                    width: 44,
+                    height: 44,
                     borderRadius: '10px',
                     '&:hover': { bgcolor: 'action.hover' }
                   }}
@@ -122,7 +123,8 @@ export const Subcategories: React.FC<SubcategoriesProps> = ({
                   onClick={() => setEditingCategory(sub)}
                   sx={{ 
                     color: 'text.secondary',
-                    p: 0.75,
+                    width: 44,
+                    height: 44,
                     borderRadius: '10px',
                     '&:hover': { bgcolor: 'action.selected', color: 'text.primary' }
                   }}
@@ -135,7 +137,8 @@ export const Subcategories: React.FC<SubcategoriesProps> = ({
                   sx={{ 
                     color: 'text.disabled',
                     cursor: 'grab',
-                    p: 0.75,
+                    width: 44,
+                    height: 44,
                     borderRadius: '10px',
                     '&:active': { cursor: 'grabbing' },
                     '&:hover': { color: 'text.secondary' }

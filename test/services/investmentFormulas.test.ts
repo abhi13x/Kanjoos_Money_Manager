@@ -63,10 +63,11 @@ describe('investmentFormulas', () => {
         tenureMonths: 12,
       });
 
-      // Using the formula: M = P * [((1 + R/400)^(4n) - 1) / (1 - (1 + R/400)^(-1/3))]
-      // P = 10000, R = 6, n = 12
+      // RBI standard RD formula: M = P * [((1 + R/400)^(n/3) - 1) / (1 - (1 + R/400)^(-1/3))]
+      // where n/3 is the number of quarters in the tenure (n = tenure in months)
+      // P = 10000, R = 6, n = 12 => 4 quarters
       const quarterlyBase = 1 + 6/400; // 1.015
-      const numerator = Math.pow(quarterlyBase, 4*12) - 1; // (1.015^48 - 1)
+      const numerator = Math.pow(quarterlyBase, 12/3) - 1; // (1.015^4 - 1)
       const denominator = 1 - Math.pow(quarterlyBase, -1/3);
       const expected = Math.round(10000 * numerator / denominator);
       expect(result.maturityValueCents).toBe(expected);
@@ -209,15 +210,24 @@ describe('investmentFormulas', () => {
         annualRatePercent: 12,
         tenureMonths: 12,
       });
-      // After 12 months: each month deposit 1000, interest at year-end on balance
-      // Month 1-11: just accumulate deposits, no interest
-      // Month 12: deposit 1000, then interest on total balance (12*1000 = 12000) at 12%
-      // Interest = 12000 * 0.12 = 1440
-      // Balance = 12000 + 1440 = 13440
-      // Pro-rate for remainder months: remainderMonths = 0, so no pro-rating
-      expect(smallResult.maturityValueCents).toBe(13440);
+      // Interest accrues monthly on the running balance and is credited once a year.
+      // monthlyRate = 12/12/100 = 0.01
+      let balance = 0;
+      let accrued = 0;
+      const monthlyRate = 12 / 12 / 100;
+      for (let m = 1; m <= 12; m++) {
+        balance += 1000;
+        accrued += balance * monthlyRate;
+        if (m % 12 === 0) {
+          balance += accrued;
+          accrued = 0;
+        }
+      }
+      balance += accrued;
+      const expected = Math.round(balance);
+      expect(smallResult.maturityValueCents).toBe(expected);
       expect(smallResult.totalInvestedCents).toBe(12000);
-      expect(smallResult.interestEarnedCents).toBe(1440);
+      expect(smallResult.interestEarnedCents).toBe(expected - 12000);
     });
 
     it('should handle zero monthly deposit', () => {
@@ -251,14 +261,20 @@ describe('investmentFormulas', () => {
         tenureMonths: 24,
       });
 
-      // Simulate: each month deposit 2000, interest at year-end on balance
+      // Interest accrues monthly on the running balance and is credited once a year
+      // (EPFO delegates to the same monthly-accrual formula as calculatePPF).
       let balance = 0;
+      let accrued = 0;
+      const monthlyRate = 8.5 / 12 / 100;
       for (let m = 1; m <= 24; m++) {
         balance += 2000;
+        accrued += balance * monthlyRate;
         if (m % 12 === 0) {
-          balance += balance * (8.5/100);
+          balance += accrued;
+          accrued = 0;
         }
       }
+      balance += accrued;
       const expected = Math.round(balance);
       expect(result.maturityValueCents).toBe(expected);
       expect(result.totalInvestedCents).toBe(2000 * 24);

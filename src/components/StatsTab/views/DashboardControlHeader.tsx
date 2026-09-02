@@ -5,7 +5,6 @@ import type { SortedCategoryOption } from '../features/CategoryManager';
 
 interface DashboardControlHeaderProps {
   groupBy: 'month' | 'year';
-  onGroupByChange: (val: 'month' | 'year') => void;
   effectivePeriod: string;
   onEffectivePeriodChange: (val: string) => void;
   availablePeriods: string[];

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Category } from '@/db/schema';
 import { db } from '@/db/schema';
 import {
@@ -20,12 +20,13 @@ interface EditCategoryModalProps {
 export const EditCategoryModal: React.FC<EditCategoryModalProps> = ({ 
     open, category, onClose }) => {
   const [name, setName] = useState(category?.name || '');
+  const [lastCategoryId, setLastCategoryId] = useState<string | null>(category?.id ?? null);
 
-  useEffect(() => {
-    if (category) {
-      setName(category.name);
-    }
-  }, [category]);
+  // Reset the name field whenever a different category is opened for editing (derived-state-during-render)
+  if (category && category.id !== lastCategoryId) {
+    setLastCategoryId(category.id);
+    setName(category.name);
+  }
 
   if (!category) return null;
 

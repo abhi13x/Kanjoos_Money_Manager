@@ -1,4 +1,4 @@
-import { useState, useCallback, useSyncExternalStore } from 'react';
+import { useState, useCallback, useRef, useSyncExternalStore } from 'react';
 import { GDriveSyncService } from '@/services/gdriveSync';
 
 export interface UseGDriveSessionReturn {
@@ -56,7 +56,7 @@ const subscribe = (callback: () => void) => {
   const unsubscribeService = syncService.subscribe(callback);
 
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key.startsWith('kanjoos_gdrive_')) {
+    if (event.key === null || syncService.getStorageKeys().includes(event.key)) {
       callback();
     }
   };
@@ -121,6 +121,20 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
   );
 
   const [isPending, setIsPending] = useState<boolean>(false);
+  // Tracks concurrently in-flight operations so one finishing early doesn't clear
+  // isPending while another (e.g. a background sync) is still running.
+  const pendingCountRef = useRef(0);
+
+  const withPending = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    pendingCountRef.current += 1;
+    setIsPending(true);
+    try {
+      return await fn();
+    } finally {
+      pendingCountRef.current -= 1;
+      if (pendingCountRef.current === 0) setIsPending(false);
+    }
+  }, []);
 
   // Private helper to retrieve token without mutating UI pending state directly
   const getOrAcquireToken = useCallback(async (): Promise<string> => {
@@ -135,13 +149,8 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
   }, []);
 
   const ensureAuthenticated = useCallback(async (): Promise<string> => {
-    setIsPending(true);
-    try {
-      return await getOrAcquireToken();
-    } finally {
-      setIsPending(false);
-    }
-  }, [getOrAcquireToken]);
+    return withPending(() => getOrAcquireToken());
+  }, [getOrAcquireToken, withPending]);
 
   const disconnect = useCallback(() => {
     syncService.clearSession();
@@ -149,42 +158,33 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
   }, []);
 
   const sync = useCallback(async (): Promise<void> => {
-    setIsPending(true);
-    try {
+    return withPending(async () => {
       await syncService.sync();
       notifySessionChange();
-    } finally {
-      setIsPending(false);
-    }
-  }, []);
+    });
+  }, [withPending]);
 
   const exportBackup = useCallback(
     async (customFileName?: string): Promise<string> => {
-      setIsPending(true);
-      try {
+      return withPending(async () => {
         const token = await getOrAcquireToken();
         const fileName = await syncService.exportBackupToDrive(token, customFileName);
         notifySessionChange();
         return fileName;
-      } finally {
-        setIsPending(false);
-      }
+      });
     },
-    [getOrAcquireToken]
+    [getOrAcquireToken, withPending]
   );
 
   const importBackup = useCallback(
     async (customFileName?: string): Promise<void> => {
-      setIsPending(true);
-      try {
+      return withPending(async () => {
         const token = await getOrAcquireToken();
         await syncService.importBackupFromDrive(token, customFileName);
         notifySessionChange();
-      } finally {
-        setIsPending(false);
-      }
+      });
     },
-    [getOrAcquireToken]
+    [getOrAcquireToken, withPending]
   );
 
   return {

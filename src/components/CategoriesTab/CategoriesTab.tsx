@@ -16,6 +16,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Box, Card, CardContent } from '@mui/material';
 import { db, type Category } from '@/db/schema';
+import { recordDeletedTransactionId } from '@/services/gdriveSync';
 import { TopHeaderNav } from './views/TopHeaderNav';
 import { AddCategoryModal } from './views/AddCategoryModal';
 import { EditCategoryModal } from './views/EditCategoryModal';
@@ -84,9 +85,12 @@ export const CategoriesTab: React.FC<CategoriesTabProps> = ({ categories, onBack
 
     try {
       await db.categories.delete(id);
+      recordDeletedTransactionId(id);
+
       const children = categories.filter((c) => c.parentId === id);
       for (const child of children) {
         await db.categories.delete(child.id);
+        recordDeletedTransactionId(child.id);
       }
       
       // Reset selected parent state if deleting the active parent category

@@ -6,7 +6,7 @@ import TransactionModal from './components/TransactionModal/TransactionModal';
 import { GDriveSyncService } from './services/gdriveSync';
 import { useSettings } from './hooks/useSettings';
 import { getAppTheme } from './services/themeService';
-import { IosSafeAreaLayoutContainer } from './components/iOSSafeAreaLayoutContainer';
+import { IosSafeAreaLayoutContainer } from './components/IosSafeAreaLayoutContainer';
 import type { Transaction } from '@/db/schema';
 
 function App() {
@@ -17,23 +17,12 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTransaction, setEditTransaction] = useState<Transaction | null>(null);
 
-  // Sync theme mode with document root class for App.css variables
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (themeMode === 'system') {
-      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.add(systemDark ? 'dark' : 'light');
-    } else {
-      root.classList.add(themeMode);
-    }
-  }, [themeMode]);
-
   // Handle Google Drive auto-sync & edit modal custom event listeners
   useEffect(() => {
     const syncService = GDriveSyncService.getInstance();
-    if (syncService.hasCachedSession()) {
+    // Start auto-sync whenever the user has connected before, even if the short-lived
+    // access token already expired — startAutoSync attempts a silent renewal on its own.
+    if (syncService.hasStoredCredentials()) {
       syncService.startAutoSync();
     }
 

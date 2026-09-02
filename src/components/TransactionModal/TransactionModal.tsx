@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Transaction } from '@/db/schema';
 import { addTransactionWithSync, updateTransactionWithSync } from '@/services/financeService';
@@ -40,11 +40,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatInterval, setRepeatInterval] = useState<RepeatInterval>('monthly');
 
-  // IndexedDB Dexie Live Queries
-  const accounts = useLiveQuery(() => db.accounts.toArray()) ?? [];
-  const categories = useLiveQuery(() => db.categories.toArray()) ?? [];
+  // IndexedDB Dexie Live Queries — memoized so the array reference is stable across
+  // unrelated re-renders (only changes when the underlying query result actually changes)
+  const rawAccounts = useLiveQuery(() => db.accounts.toArray());
+  const accounts = useMemo(() => rawAccounts ?? [], [rawAccounts]);
+  const rawCategories = useLiveQuery(() => db.categories.toArray());
+  const categories = useMemo(() => rawCategories ?? [], [rawCategories]);
 
-  useEffect(() => {
+  // Reset/populate form fields whenever the modal opens for a (new) transaction, or once
+  // categories finish loading (derived-state-during-render, avoids a setState-in-effect cascade)
+  const initKey = isOpen ? `${editTransaction?.id ?? 'new'}:${categories.length > 0}` : 'closed';
+  const [lastInitKey, setLastInitKey] = useState<string | null>(null);
+
+  if (lastInitKey !== initKey) {
+    setLastInitKey(initKey);
+
     if (isOpen && editTransaction) {
       setType(editTransaction.type ?? 'expense');
       setAmount(editTransaction.amount ? (editTransaction.amount / 100).toFixed(2) : '');
@@ -84,7 +94,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setIsRecurring(false);
       setRepeatInterval('monthly');
     }
-  }, [isOpen, editTransaction, categories]);
+  }
 
   const parentCategories = useMemo(() => {
     if (type === 'transfer') return [];
@@ -171,7 +181,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <Typography component="span" variant="h6" sx={{ fontWeight: 800 }}>
           {editTransaction ? 'Edit Transaction' : 'New Transaction'}
         </Typography>
-        <IconButton onClick={onClose} size="small" sx={{ color: 'text.secondary' }}>
+        <IconButton onClick={onClose} size="small" sx={{ color: 'text.secondary', width: 44, height: 44 }}>
           <X size={20} />
         </IconButton>
       </DialogTitle>

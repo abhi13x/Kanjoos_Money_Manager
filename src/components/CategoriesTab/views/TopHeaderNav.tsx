@@ -49,6 +49,7 @@ export const TopHeaderNav: FC<{
 
       <IconButton
         color="primary"
+        sx={{ width: 44, height: 44 }}
         onClick={() => {
           if (selectedParentCategory) {
             setAddModalState({ 

@@ -90,8 +90,8 @@ export const MonthYearSelector: React.FC<MonthYearSelectorProps> = ({
           size="small"
           sx={{
             color: 'text.secondary',
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             '&:active': { transform: 'scale(0.92)' },
           }}
         >
@@ -122,8 +122,8 @@ export const MonthYearSelector: React.FC<MonthYearSelectorProps> = ({
           size="small"
           sx={{
             color: 'text.secondary',
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             '&:active': { transform: 'scale(0.92)' },
           }}
         >
@@ -201,8 +201,8 @@ export const MonthYearSelector: React.FC<MonthYearSelectorProps> = ({
               sx={{
                 color: 'text.secondary',
                 bgcolor: 'action.hover',
-                width: 26,
-                height: 26,
+                width: 44,
+                height: 44,
               }}
             >
               <X size={14} strokeWidth={2.5} />
@@ -226,8 +226,8 @@ export const MonthYearSelector: React.FC<MonthYearSelectorProps> = ({
             size="small"
             sx={{
               color: 'primary.main',
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               '&:active': { transform: 'scale(0.9)' },
             }}
           >
@@ -252,8 +252,8 @@ export const MonthYearSelector: React.FC<MonthYearSelectorProps> = ({
             size="small"
             sx={{
               color: 'primary.main',
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               '&:active': { transform: 'scale(0.9)' },
             }}
           >

@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ViewToggles } from './view/ViewToggles';
-import { filterAndSortTransactions } from './feature/filterTransaction';
+import { ViewToggles } from './views/ViewToggles';
+import { filterAndSortTransactions } from './features/filterTransaction';
 import { Box } from '@mui/material';
 import type { Transaction, Account, Category } from '@/db/schema';
 import { deleteTransactionWithSync } from '@/services/financeService';
-import { NoDataView } from './view/LedgerOutput/NoDataView';
-import DayGroupCard from './view/LedgerOutput/DayGroupCard';
-import { GroupData } from './feature/GroupData';
-import { DeleteDialog } from './view/DeleteDialog';
-import { TransactionRow, type ViewMode } from './view/LedgerOutput/TransactionRow';
-import { MonthYearSelector } from './view/MonthSelector';
+import { NoDataView } from './views/LedgerOutput/NoDataView';
+import DayGroupCard from './views/LedgerOutput/DayGroupCard';
+import { GroupData } from './features/GroupData';
+import { DeleteDialog } from './views/DeleteDialog';
+import { TransactionRow, type ViewMode } from './views/LedgerOutput/TransactionRow';
+import { MonthYearSelector } from './views/MonthSelector';
 
 export interface TransactionsTabProps {
   transactions: Transaction[];
@@ -62,9 +62,8 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
     (tx: Transaction) => {
       if (tx.type === 'transfer') return 'Transfer';
 
-      const rawTx = tx as Record<string, any>;
-      const catId = rawTx.categoryId || rawTx.category_id;
-      const subCatId = rawTx.subCategoryId || rawTx.subcategoryId || rawTx.sub_category_id;
+      const catId = tx.categoryId;
+      const subCatId = tx.subCategoryId;
 
       // 1. Handles separate categoryId (Parent) and subCategoryId (Child)
       if (catId && subCatId) {

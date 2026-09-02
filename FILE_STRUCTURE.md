@@ -26,7 +26,8 @@ money-manager/
 │   │   │       ├── TabSelector.tsx
 │   │   │       └── TopHeaderNav.tsx
 │   │   ├── Dashboard.tsx
-│   │   ├── iOSSafeAreaLayoutContainer.tsx
+│   │   ├── DriveSyncSettings.tsx
+│   │   ├── IosSafeAreaLayoutContainer.tsx
 │   │   ├── SettingsTab.tsx
 │   │   ├── StatsTab/
 │   │   │   ├── StatsTab.tsx
@@ -35,12 +36,11 @@ money-manager/
 │   │   │   │   ├── CategoryManager.tsx
 │   │   │   │   ├── Chart/
 │   │   │   │   │   ├── Periodic.tsx
-│   │   │   │   │   ├── PieAndTable.tsx
 │   │   │   │   │   └── Timeline.tsx
 │   │   │   │   ├── ControlState.tsx
 │   │   │   │   ├── DataFilters.tsx
 │   │   │   │   └── Helper.tsx
-│   │   │   └── view/
+│   │   │   └── views/
 │   │   │       ├── CategoryBreakdownChart.tsx
 │   │   │       ├── DashboardControlHeader.tsx
 │   │   │       ├── TemporalVolumesChart.tsx
@@ -56,10 +56,10 @@ money-manager/
 │   │   │       └── SegmentTypeSwitch.tsx
 │   │   └── TransactionTab/
 │   │       ├── TransactionTab.tsx
-│   │       ├── feature/
+│   │       ├── features/
 │   │       │   ├── filterTransaction.tsx
 │   │       │   └── GroupData.tsx
-│   │       └── view/
+│   │       └── views/
 │   │           ├── DateRangePicker.tsx
 │   │           ├── DeleteDialog.tsx
 │   │           ├── LedgerOutput/
@@ -69,8 +69,6 @@ money-manager/
 │   │           │   └── TransactionRow.tsx
 │   │           ├── MonthSelector.tsx
 │   │           └── ViewToggles.tsx
-│   ├── constants/
-│   │   └── statsTab.ts
 │   ├── db/
 │   │   └── schema.ts
 │   ├── hooks/
@@ -146,21 +144,20 @@ money-manager/
 - **src/components/CategoriesTab/views/TopHeaderNav.tsx**: Header navigation within the Categories tab.
 - **src/components/Dashboard.tsx**: Main dashboard showing overview of finances, recent transactions, and quick actions.
 - **src/components/DriveSyncSettings.tsx**: View for managing Google Drive synchronization, including connecting, syncing, backing up, and restoring data.
-- **src/components/iOSSafeAreaLayoutContainer.tsx**: Wrapper to handle iOS safe area (notch) for mobile responsiveness.
+- **src/components/IosSafeAreaLayoutContainer.tsx**: Wrapper to handle iOS safe area (notch) for mobile responsiveness.
 - **src/components/SettingsTab.tsx**: View for app settings, including Google Drive sync configuration.
 - **src/components/StatsTab/StatsTab.tsx**: Main component for the Statistics tab, displaying charts and financial metrics.
 - **src/components/StatsTab/features/Axis.tsx**: Custom axis component for charts.
 - **src/components/StatsTab/features/CategoryManager.tsx**: Manages category selection and filtering for stats.
 - **src/components/StatsTab/features/Chart/Periodic.tsx**: Chart showing periodic (e.g., monthly) income vs expenses.
-- **src/components/StatsTab/features/Chart/PieAndTable.tsx**: Pie chart with accompanying table for category breakdown.
 - **src/components/StatsTab/features/Chart/Timeline.tsx**: Timeline chart showing transaction trends over time.
 - **src/components/StatsTab/features/ControlState.tsx**: Manages UI state for chart controls (date range, etc.).
 - **src/components/StatsTab/features/DataFilters.tsx**: UI components for filtering data shown in stats.
 - **src/components/StatsTab/features/Helper.tsx**: Utility functions or helpers for stats calculations.
-- **src/components/StatsTab/view/CategoryBreakdownChart.tsx**: Chart visualizing spending by category.
-- **src/components/StatsTab/view/DashboardControlHeader.tsx**: Header with controls for the dashboard (maybe reused).
-- **src/components/StatsTab/view/TemporalVolumesChart.tsx**: Chart showing transaction volumes over time.
-- **src/components/StatsTab/view/TimelineChart.tsx**: Chart showing transactions on a timeline.
+- **src/components/StatsTab/views/CategoryBreakdownChart.tsx**: Chart visualizing spending by category.
+- **src/components/StatsTab/views/DashboardControlHeader.tsx**: Header with controls for the dashboard (maybe reused).
+- **src/components/StatsTab/views/TemporalVolumesChart.tsx**: Chart showing transaction volumes over time.
+- **src/components/StatsTab/views/TimelineChart.tsx**: Chart showing transactions on a timeline.
 - **src/components/SummaryTab.tsx**: View summarizing transactions (e.g., by month, category).
 - **src/components/TabMenu.tsx**: Bottom or side navigation menu to switch between tabs (Accounts, Stats, Summary, Settings).
 - **src/components/TransactionModal/TransactionModal.tsx**: Main modal for adding or editing a transaction.
@@ -169,19 +166,16 @@ money-manager/
 - **src/components/TransactionModal/views/Recurring.tsx**: Options for setting up recurring transactions.
 - **src/components/TransactionModal/views/SegmentTypeSwitch.tsx**: Switch to select transaction type (Income, Expense, Transfer).
 - **src/components/TransactionTab/TransactionTab.tsx**: Main view for listing and managing transactions.
-- **src/components/TransactionTab/feature/filterTransaction.tsx**: Logic or UI for filtering transactions (by date, account, etc.).
-- **src/components/TransactionTab/feature/GroupData.tsx**: Groups transactions for display (e.g., by day, month).
-- **src/components/TransactionTab/view/DateRangePicker.tsx**: Picker for selecting a date range to filter transactions.
-- **src/components/TransactionTab/view/DeleteDialog.tsx**: Confirmation dialog for deleting a transaction.
-- **src/components/TransactionTab/view/LedgerOutput/DataView.tsx**: Main table or list view of transactions.
-- **src/components/TransactionTab/view/LedgerOutput/DayGroupCard.tsx**: Card component grouping transactions by day.
-- **src/components/TransactionTab/view/LedgerOutput/NoDataView.tsx**: Shown when there are no transactions to display.
-- **src/components/TransactionTab/view/LedgerOutput/TransactionRow.tsx**: Individual row representing a transaction in the ledger.
-- **src/components/TransactionTab/view/MonthSelector.tsx**: Dropdown to select a month for viewing transactions.
-- **src/components/TransactionTab/view/ViewToggles.tsx**: Toggles to switch between different views (e.g., list, chart).
-
-### Constants
-- **src/constants/statsTab.ts**: Constants used in the Statistics tab (e.g., chart colors, default time ranges).
+- **src/components/TransactionTab/features/filterTransaction.tsx**: Logic or UI for filtering transactions (by date, account, etc.).
+- **src/components/TransactionTab/features/GroupData.tsx**: Groups transactions for display (e.g., by day, month).
+- **src/components/TransactionTab/views/DateRangePicker.tsx**: Picker for selecting a date range to filter transactions.
+- **src/components/TransactionTab/views/DeleteDialog.tsx**: Confirmation dialog for deleting a transaction.
+- **src/components/TransactionTab/views/LedgerOutput/DataView.tsx**: Main table or list view of transactions.
+- **src/components/TransactionTab/views/LedgerOutput/DayGroupCard.tsx**: Card component grouping transactions by day.
+- **src/components/TransactionTab/views/LedgerOutput/NoDataView.tsx**: Shown when there are no transactions to display.
+- **src/components/TransactionTab/views/LedgerOutput/TransactionRow.tsx**: Individual row representing a transaction in the ledger.
+- **src/components/TransactionTab/views/MonthSelector.tsx**: Dropdown to select a month for viewing transactions.
+- **src/components/TransactionTab/views/ViewToggles.tsx**: Toggles to switch between different views (e.g., list, chart).
 
 ### Database
 - **src/db/schema.ts**: Defines the Dexie database schema for accounts, categories, and transactions; includes seeding logic.

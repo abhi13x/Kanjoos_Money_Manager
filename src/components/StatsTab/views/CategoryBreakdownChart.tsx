@@ -106,6 +106,18 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
     [categoryBreakdown, totalBreakdownAmount]
   );
 
+  const pieArcs = useMemo(() => {
+    return pieSlices.reduce<{ slice: PieSlice; startAngle: number; endAngle: number }[]>(
+      (acc, slice) => {
+        const start = acc.length > 0 ? acc[acc.length - 1].endAngle : 0;
+        const angle = (slice.percentage / 100) * 360;
+        acc.push({ slice, startAngle: start, endAngle: start + angle });
+        return acc;
+      },
+      []
+    );
+  }, [pieSlices]);
+
   const handleItemClick = (itemId: string | number) => {
     const stringId = String(itemId);
     if (String(selectedCategory) === stringId) {
@@ -114,8 +126,6 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
       setSelectedCategory(stringId);
     }
   };
-
-  let cumulativeAngle = 0;
 
   return (
     <Paper
@@ -149,8 +159,8 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
                 onClick={() => setSelectedCategory("all")}
                 sx={{
                   mr: 0.5,
-                  width: 36,
-                  height: 36,
+                  width: 44,
+                  height: 44,
                   bgcolor: alpha(theme.palette.action.hover, 0.06),
                   borderRadius: "50%",
                 }}
@@ -231,12 +241,7 @@ export const CategoryBreakdownChart: React.FC<CategoryBreakdownChartProps> = ({
         >
           <Box sx={{ width: 200, height: 200, position: "relative" }}>
             <svg width="200" height="200" viewBox="0 0 200 200">
-              {pieSlices.map((slice) => {
-                const angle = (slice.percentage / 100) * 360;
-                const startAngle = cumulativeAngle;
-                const endAngle = cumulativeAngle + angle;
-                cumulativeAngle += angle;
-
+              {pieArcs.map(({ slice, startAngle, endAngle }) => {
                 const isSelected = String(slice.id) === String(selectedCategory);
                 const isHovered = hoveredSlice?.id === slice.id;
                 const pathD = getArcPath(100, 100, 75, startAngle, endAngle);

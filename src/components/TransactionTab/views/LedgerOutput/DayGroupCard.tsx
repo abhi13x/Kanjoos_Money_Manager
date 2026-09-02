@@ -2,7 +2,7 @@ import React, { memo, useState, useRef } from 'react';
 import { Box, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { Trash2, TrendingUp, TrendingDown } from 'lucide-react';
-import type { Transaction, Account } from '@/db/schema';
+import type { Transaction, Account, Category } from '@/db/schema';
 
 // Native iOS System Colors
 const IOS_COLORS = {
@@ -13,13 +13,6 @@ const IOS_COLORS = {
 
 const DELETE_ACTION_WIDTH = 76;
 
-export interface CategoryItem {
-  id: string;
-  name: string;
-  parentId?: string | null;
-  [key: string]: any;
-}
-
 export interface DayGroupProps {
   groupTitle: string;
   totalIncome: number;
@@ -27,7 +20,7 @@ export interface DayGroupProps {
   netCents: number;
   transactions: Transaction[];
   accounts?: Account[];
-  categories?: CategoryItem[];
+  categories?: Category[];
   format?: (cents: number) => string;
   getCategoryName?: (tx: Transaction) => string;
   onDeleteTx?: (id: string) => void;
@@ -58,25 +51,6 @@ const parseCategories = (tx: Transaction, fallbackCategoryName: string) => {
     return { parentCategory: 'Transfer', childCategory: '' };
   }
 
-  const raw = tx as Record<string, any>;
-
-  let parent =
-    raw.parentCategoryName ||
-    raw.parentCategory?.name ||
-    (typeof raw.parentCategory === 'string' ? raw.parentCategory : null) ||
-    raw.category?.parent?.name ||
-    raw.category?.parentCategory?.name ||
-    raw.categoryName ||
-    (typeof raw.category === 'object' ? raw.category?.name : null);
-
-  let child =
-    raw.subCategoryName ||
-    raw.subcategoryName ||
-    raw.subCategory?.name ||
-    raw.subcategory?.name ||
-    (typeof raw.subCategory === 'string' ? raw.subCategory : null) ||
-    (typeof raw.subcategory === 'string' ? raw.subcategory : null);
-
   const delimiter = ['/', '>', ':', '|'].find((d) => fallbackCategoryName.includes(d));
   if (delimiter) {
     const parts = fallbackCategoryName.split(delimiter);
@@ -86,19 +60,7 @@ const parseCategories = (tx: Transaction, fallbackCategoryName: string) => {
     };
   }
 
-  if (parent && parent !== fallbackCategoryName && !child) {
-    child = fallbackCategoryName;
-  } else if (child && child !== fallbackCategoryName && !parent) {
-    parent = fallbackCategoryName;
-  }
-
-  const finalParent = parent || fallbackCategoryName;
-  const finalChild = child && child !== finalParent ? child : '';
-
-  return {
-    parentCategory: finalParent,
-    childCategory: finalChild,
-  };
+  return { parentCategory: fallbackCategoryName, childCategory: '' };
 };
 
 const formatAccountLabel = (tx: Transaction, account?: Account, toAccount?: Account | null) => {

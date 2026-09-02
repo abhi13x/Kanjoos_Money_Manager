@@ -44,7 +44,7 @@ export const GroupData = ({
 
   filteredTx.forEach((tx) => {
     const dateObj = parseTxDate(tx.date);
-    let key = '';
+    let key: string;
 
     if (value === 0) {
       key = dailyFormatter.format(dateObj);

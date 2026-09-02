@@ -146,41 +146,40 @@ export const getCategoryBreakdown = (
     const childCategories = categories.filter(
       (cat) => String(cat.parentId) === String(selectedCategory)
     );
+    const childIds = new Set(childCategories.map((cat) => String(cat.id)));
+    const subCategoryAmounts = new Map<string, number>();
+    let filteredTotal = 0;
 
-    if (childCategories.length > 0) {
-      const childIds = new Set(childCategories.map((cat) => String(cat.id)));
-      const subCategoryAmounts = new Map<string, number>();
-      let filteredTotal = 0;
+    transactions.forEach((tx) => {
+      const txCatId = String(tx.categoryId);
+      if (childIds.has(txCatId) || txCatId === String(selectedCategory)) {
+        const amt = Math.abs(tx.amount);
+        filteredTotal += amt;
+        const targetKey = childIds.has(txCatId) ? txCatId : String(selectedCategory);
+        subCategoryAmounts.set(
+          targetKey,
+          (subCategoryAmounts.get(targetKey) || 0) + amt
+        );
+      }
+    });
 
-      transactions.forEach((tx) => {
-        const txCatId = String(tx.categoryId);
-        if (childIds.has(txCatId) || txCatId === String(selectedCategory)) {
-          const amt = Math.abs(tx.amount);
-          filteredTotal += amt;
-          const targetKey = childIds.has(txCatId) ? txCatId : String(selectedCategory);
-          subCategoryAmounts.set(
-            targetKey,
-            (subCategoryAmounts.get(targetKey) || 0) + amt
-          );
-        }
-      });
+    const breakdown: CategoryBreakdownItem[] = [];
+    subCategoryAmounts.forEach((amt, catId) => {
+      const cat = categoryMap.get(catId);
+      if (amt > 0) {
+        breakdown.push({
+          id: catId,
+          name: cat ? cat.name : "Uncategorized",
+          amount: amt,
+          percentage: filteredTotal > 0 ? (amt / filteredTotal) * 100 : 0,
+          color: cat?.color ?? undefined,
+        });
+      }
+    });
 
-      const breakdown: CategoryBreakdownItem[] = [];
-      subCategoryAmounts.forEach((amt, catId) => {
-        const cat = categoryMap.get(catId);
-        if (amt > 0) {
-          breakdown.push({
-            id: catId,
-            name: cat ? cat.name : "Uncategorized",
-            amount: amt,
-            percentage: filteredTotal > 0 ? (amt / filteredTotal) * 100 : 0,
-            color: cat?.color ?? undefined,
-          });
-        }
-      });
-
-      return breakdown.sort((a, b) => b.amount - a.amount);
-    }
+    // Always return here: selecting a leaf category (no children) should show just
+    // that category's own breakdown, not silently fall back to the full unfiltered view.
+    return breakdown.sort((a, b) => b.amount - a.amount);
   }
 
   const parentTotals = new Map<
