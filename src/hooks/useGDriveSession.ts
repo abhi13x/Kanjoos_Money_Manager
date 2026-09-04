@@ -2,25 +2,22 @@ import { useState, useCallback, useRef, useSyncExternalStore } from 'react';
 import { GDriveSyncService } from '@/services/gdriveSync';
 
 export interface UseGDriveSessionReturn {
-  /** True if a valid session or token exists in local storage */
   isConnected: boolean;
-  /** True if a sync operation is currently active in the background */
   isSyncing: boolean;
-  /** Timestamp (ms) of the last successful database synchronization */
   lastSyncTime: number | null;
-  /** Last encountered error message from Google Drive service */
   error: string | null;
-  /** True while an authentication, export, or import action is pending */
-  isPending: boolean;
-  /** Ensure an active OAuth token exists, prompting user login if needed */
+  isPending: boolean; // per-instance pending flag
+  /** Checks for a valid token; throws `AUTH_REQUIRED` if none exists. */
   ensureAuthenticated: () => Promise<string>;
-  /** Disconnect Google Drive session and purge stored credentials */
+  /** Explicitly triggers the Google OAuth popup; returns the token. */
+  login: () => Promise<string>;
+  /** Disconnect and clear session. */
   disconnect: () => void;
-  /** Perform full bidirectional database sync with Google Drive */
+  /** Full sync – will throw `AUTH_REQUIRED` if not logged in. */
   sync: () => Promise<void>;
-  /** Create and upload a backup JSON file to Google Drive */
+  /** Export backup – throws `AUTH_REQUIRED` if not logged in. */
   exportBackup: (customFileName?: string) => Promise<string>;
-  /** Restore database state from a Google Drive backup file */
+  /** Import backup – throws `AUTH_REQUIRED` if not logged in. */
   importBackup: (customFileName?: string) => Promise<void>;
 }
 
@@ -47,7 +44,7 @@ const notifySessionChange = () => {
 };
 
 /* ==========================================================
-   EXTERNAL STORE SUBSCRIPTION & SINGLE SNAPSHOT SELECTOR
+   EXTERNAL STORE SUBSCRIPTION
    ========================================================== */
 
 const subscribe = (callback: () => void) => {
@@ -82,7 +79,6 @@ const getStoreSnapshot = (): GDriveStoreState => {
   const status = syncService.getStatus();
   const isConnected = syncService.hasCachedSession();
 
-  // Return identical object reference if primitives haven't changed to prevent unnecessary re-renders
   if (
     cachedState.isConnected === isConnected &&
     cachedState.isSyncing === status.isSyncing &&
@@ -114,15 +110,9 @@ const getServerSnapshot = (): GDriveStoreState => ({
    ========================================================== */
 
 export const useGDriveSession = (): UseGDriveSessionReturn => {
-  const storeState = useSyncExternalStore(
-    subscribe,
-    getStoreSnapshot,
-    getServerSnapshot
-  );
+  const storeState = useSyncExternalStore(subscribe, getStoreSnapshot, getServerSnapshot);
 
   const [isPending, setIsPending] = useState<boolean>(false);
-  // Tracks concurrently in-flight operations so one finishing early doesn't clear
-  // isPending while another (e.g. a background sync) is still running.
   const pendingCountRef = useRef(0);
 
   const withPending = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
@@ -136,21 +126,31 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
     }
   }, []);
 
-  // Private helper to retrieve token without mutating UI pending state directly
+  // ─── Private helper – NO popup ──────────────────────────────
   const getOrAcquireToken = useCallback(async (): Promise<string> => {
     const cached = await syncService.getValidToken(false);
     if (cached) return cached;
 
-    const token = await syncService.authenticate();
-    if (!token) throw new Error('Google sign-in was cancelled.');
-
-    notifySessionChange();
-    return token;
+    // No valid token – throw a specific error so the UI can show a login prompt
+    const error = new Error('Authentication required. Please log in.');
+    (error as any).code = 'AUTH_REQUIRED';
+    throw error;
   }, []);
+
+  // ─── Public methods ──────────────────────────────────────────
 
   const ensureAuthenticated = useCallback(async (): Promise<string> => {
     return withPending(() => getOrAcquireToken());
   }, [getOrAcquireToken, withPending]);
+
+  const login = useCallback(async (): Promise<string> => {
+    return withPending(async () => {
+      const token = await syncService.authenticate();
+      if (!token) throw new Error('Google sign-in was cancelled.');
+      notifySessionChange(); // force UI refresh after login
+      return token;
+    });
+  }, [withPending]);
 
   const disconnect = useCallback(() => {
     syncService.clearSession();
@@ -159,16 +159,17 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
 
   const sync = useCallback(async (): Promise<void> => {
     return withPending(async () => {
+      await getOrAcquireToken(); // throws if not authenticated
       await syncService.sync();
       notifySessionChange();
     });
-  }, [withPending]);
+  }, [getOrAcquireToken, withPending]);
 
   const exportBackup = useCallback(
     async (customFileName?: string): Promise<string> => {
       return withPending(async () => {
-        const token = await getOrAcquireToken();
-        const fileName = await syncService.exportBackupToDrive(token, customFileName);
+        await getOrAcquireToken(); // throws if not authenticated
+        const fileName = await syncService.exportBackupToDrive(undefined, customFileName);
         notifySessionChange();
         return fileName;
       });
@@ -179,8 +180,8 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
   const importBackup = useCallback(
     async (customFileName?: string): Promise<void> => {
       return withPending(async () => {
-        const token = await getOrAcquireToken();
-        await syncService.importBackupFromDrive(token, customFileName);
+        await getOrAcquireToken(); // throws if not authenticated
+        await syncService.importBackupFromDrive(undefined, customFileName);
         notifySessionChange();
       });
     },
@@ -191,6 +192,7 @@ export const useGDriveSession = (): UseGDriveSessionReturn => {
     ...storeState,
     isPending,
     ensureAuthenticated,
+    login,
     disconnect,
     sync,
     exportBackup,

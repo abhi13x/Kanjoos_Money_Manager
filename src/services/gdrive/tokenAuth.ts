@@ -37,7 +37,12 @@ export class GDriveTokenAuth {
   async ensureValidToken(token?: string | null): Promise<string> {
     const activeToken = token || (await this.getValidToken());
     if (!activeToken) {
-      throw new Error('Authentication required. Please sign in to Google Drive.');
+      // One more attempt: try interactive renewal before giving up
+      const retry = await this.getValidToken(true);
+      if (!retry) {
+        throw new Error('Authentication required. Please sign in to Google Drive.');
+      }
+      return retry;
     }
     return activeToken;
   }

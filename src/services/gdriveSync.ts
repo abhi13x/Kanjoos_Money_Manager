@@ -4,9 +4,11 @@ import { DriveApiClient } from '@/services/gDrive/driveApiClient';
 import { GDriveTombstoneStore } from '@/services/gDrive/tombstoneStore';
 import { mergeEntities, areEntityListsEqual, areIdListsEqual } from '@/services/gDrive//mergeEntities';
 import { sanitizeEntityList, sanitizeIdList } from '@/services/gDrive/backupValidation';
-import type { ConflictResolutionStrategy, 
-  GDriveSyncConfig, SyncStatus, 
-  GDriveFile } from '@/services/gDrive/types';
+import type {
+  ConflictResolutionStrategy,
+  GDriveSyncConfig, SyncStatus,
+  GDriveFile
+} from '@/services/gDrive/types';
 
 export type { ConflictResolutionStrategy, GDriveSyncConfig, SyncStatus, GDriveFile };
 
@@ -57,7 +59,20 @@ export class GDriveSyncService {
 
     this.driveApi = new DriveApiClient({
       resolveToken: (token) => this.tokenAuth.ensureValidToken(token),
-      onUnauthorized: () => this.clearSession(),
+      onUnauthorized: async () => {
+        // Step 1: Try silent token renewal first
+        const renewed = await this.tokenAuth.getValidToken(false);
+
+        if (!renewed) {
+          // Step 2: Try interactive renewal (user may need to re-consent)
+          const interactive = await this.tokenAuth.getValidToken(true);
+
+          if (!interactive) {
+            // Step 3: Only clear session if ALL renewal attempts fail
+            this.clearSession();
+          }
+        }
+      },
     });
   }
 
@@ -189,7 +204,7 @@ export class GDriveSyncService {
   }
 
   hasCachedSession(): boolean {
-    return this.tokenAuth.hasValidAccessToken();
+    return this.tokenAuth.hasStoredCredentials();   // ← use connectedKey, not token validity
   }
 
   hasValidAccessToken(): boolean {
