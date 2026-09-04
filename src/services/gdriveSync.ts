@@ -1,14 +1,14 @@
 import { db, type Account, type Category, type Transaction } from '../db/schema';
-import { GDriveTokenAuth } from '@/services/gDrive/tokenAuth';
-import { DriveApiClient } from '@/services/gDrive/driveApiClient';
-import { GDriveTombstoneStore } from '@/services/gDrive/tombstoneStore';
-import { mergeEntities, areEntityListsEqual, areIdListsEqual } from '@/services/gDrive/mergeEntities';
-import { sanitizeEntityList, sanitizeIdList } from '@/services/gDrive/backupValidation';
+import { GDriveTokenAuth } from '@/services/gdrive/tokenAuth';
+import { DriveApiClient } from '@/services/gdrive/driveApiClient';
+import { GDriveTombstoneStore } from '@/services/gdrive/tombstoneStore';
+import { mergeEntities, areEntityListsEqual, areIdListsEqual } from '@/services/gdrive/mergeEntities';
+import { sanitizeEntityList, sanitizeIdList } from '@/services/gdrive/backupValidation';
 import type {
   ConflictResolutionStrategy,
   GDriveSyncConfig, SyncStatus,
   GDriveFile
-} from '@/services/gDrive/types';
+} from '@/services/gdrive/gdriveTypes';
 
 export type { ConflictResolutionStrategy, GDriveSyncConfig, SyncStatus, GDriveFile };
 

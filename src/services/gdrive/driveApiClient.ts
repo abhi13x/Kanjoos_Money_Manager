@@ -1,4 +1,4 @@
-import type { GDriveFile } from './types';
+import type { GDriveFile } from './gdriveTypes';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
