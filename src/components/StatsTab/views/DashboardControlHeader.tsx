@@ -189,7 +189,6 @@ export const DashboardControlHeader: React.FC<DashboardControlHeaderProps> = ({
             label="Category"
             onChange={(e) => setSelectedCategory(e.target.value)}
           >
-            <MenuItem value="all">All Categories</MenuItem>
             {sortedCategoryOptions.map((cat) => (
               <MenuItem key={cat.id} value={cat.id}>
                 {cat.label}

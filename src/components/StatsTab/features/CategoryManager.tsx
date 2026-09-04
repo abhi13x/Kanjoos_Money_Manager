@@ -81,7 +81,7 @@ export const getSortedCategoryOptions = (
     if (cat.parentId) {
       const existing = childrenMap.get(cat.parentId) || [];
       existing.push(cat);
-      childrenMap.set(cat.parentId, existing);
+      // childrenMap.set(cat.parentId, existing);
     }
   });
 
@@ -107,21 +107,6 @@ export const getSortedCategoryOptions = (
         type: parent.type as "expense" | "income",
         color: parent.color ?? undefined,
       });
-
-      const children = childrenMap.get(parent.id) || [];
-      children
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach((child) => {
-          sortedOptions.push({
-            id: child.id,
-            label: `— ${child.name}`,
-            value: child.id,
-            parentId: parent.id,
-            isParent: false,
-            type: child.type as "expense" | "income",
-            color: child.color ?? undefined,
-          });
-        });
     });
 
   return sortedOptions;
