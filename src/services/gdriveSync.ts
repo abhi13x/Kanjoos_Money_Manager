@@ -2,7 +2,7 @@ import { db, type Account, type Category, type Transaction } from '../db/schema'
 import { GDriveTokenAuth } from './gDrive/tokenAuth';
 import { DriveApiClient } from './gDrive/driveApiClient';
 import { GDriveTombstoneStore } from './gDrive/tombstoneStore';
-import { mergeEntities, areEntityListsEqual, areIdListsEqual } from './gDrive//mergeEntities';
+import { mergeEntities, areEntityListsEqual, areIdListsEqual } from './gDrive/mergeEntities';
 import { sanitizeEntityList, sanitizeIdList } from './gDrive/backupValidation';
 import type {
   ConflictResolutionStrategy,
