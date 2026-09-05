@@ -35,40 +35,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # ─── DEBUGGING: Directory structure ─────────────────────
-      - name: Debug directory structure
-        run: |
-          echo "::group::📁 Debug: src/services/ contents"
-          ls -la src/services/ || echo "src/services/ not found"
-          echo "::endgroup::"
-
-          echo "::group::🔍 Check for 'gDrive' folder"
-          if [ -d "src/services/gDrive" ]; then
-            echo "✅ src/services/gDrive exists"
-            ls -la src/services/gDrive/
-          else
-            echo "❌ src/services/gDrive NOT found"
-          fi
-          echo "::endgroup::"
-
-          echo "::group::🔍 Check for 'gdrive' folder"
-          if [ -d "src/services/gdrive" ]; then
-            echo "✅ src/services/gdrive exists"
-            ls -la src/services/gdrive/
-          else
-            echo "❌ src/services/gdrive NOT found"
-          fi
-          echo "::endgroup::"
-
-          echo "::group::📄 Check gdriveSync.ts"
-          if [ -f "src/services/gdriveSync.ts" ]; then
-            echo "✅ src/services/gdriveSync.ts exists"
-            head -20 src/services/gdriveSync.ts
-          else
-            echo "❌ src/services/gdriveSync.ts NOT found"
-          fi
-          echo "::endgroup::"
-
       - name: Verify Secret Availability
         run: |
           if [ -z "$VITE_GOOGLE_CLIENT_ID" ]; then

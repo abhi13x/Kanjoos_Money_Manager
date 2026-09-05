@@ -103,7 +103,7 @@ export const AccountRow: React.FC<AccountRowProps> = ({ account: acc, projection
 
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
           <Typography sx={{ ...balanceSx, color: isCredit ? '#FF3B30' : 'text.primary' }}>
-            {isCredit ? `-${format(acc.currentBalance)}` : format(acc.currentBalance)}
+            {isCredit ? `${format(acc.currentBalance)}` : format(acc.currentBalance)}
           </Typography>
 
           <Stack direction="row" spacing={0.5}>
